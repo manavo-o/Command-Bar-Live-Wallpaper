@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>New Tab</title>
+  <!-- Styles moved to newtab/newtab.css; keep this page MV2-compatible. -->
+  <link rel="stylesheet" href="shared/design-tokens.css">
+  <link rel="stylesheet" href="newtab/newtab.css">
+</head>
+<body>
+  <div id="media-root" class="media-container"></div>
+  <div class="contrast-scrim" aria-hidden="true"></div>
+  <canvas id="fx-canvas" class="fx-canvas"></canvas>
+
+  <div id="widgets-container" class="widgets-container" style="display: none;">
+    <div id="widget-clock" class="widget-clock"></div>
+    <div id="widget-date" class="widget-date"></div>
+  </div>
+
+  <div id="widget-weather" class="glass-card widget-surface" aria-label="Weather">
+    <div class="weather-temp" id="weather-temp">--°</div>
+    <div class="weather-desc" id="weather-desc">Loading weather…</div>
+    <div class="weather-place" id="weather-place"></div>
+  </div>
+
+  <div id="widget-quote" class="glass-card widget-surface" aria-label="Quote of the day">
+    <span id="quote-text">“…”</span>
+    <span class="quote-author" id="quote-author"></span>
+  </div>
+
+  <div id="widget-focus" class="glass-card widget-surface" aria-label="Focus timer">
+    <div class="focus-mode-label" id="focus-mode-label">Focus</div>
+    <div class="focus-time" id="focus-time">25:00</div>
+    <div class="focus-controls">
+      <button class="focus-btn" id="focus-btn-toggle" type="button">Start</button>
+      <button class="focus-btn" id="focus-btn-reset" type="button">Reset</button>
+    </div>
+  </div>
+
+  <div id="fallback-ui" class="fallback-msg" style="display: none;">
+    <div class="fallback-icon" aria-hidden="true">✦</div>
+    <h2>No wallpaper yet</h2>
+    <p><a href="options.html">Open Options to upload or select a wallpaper</a></p>
+  </div>
+
+  <script src="shared/storage-keys.js"></script>
+  <script src="shared/storage-defaults.js"></script>
+  <script src="shared/storage.js"></script>
+  <script src="shared/storage-migrations.js"></script>
+  <script src="shared/ui-feedback.js"></script>
+  <script src="shared/url-utils.js"></script>
+  <script src="shared/search-engines.js"></script>
+  <script src="shared/rotation.js"></script>
+  <script src="db.js"></script>
+  <script src="newtab/newtab-media.js"></script>
+  <script src="newtab/newtab-rotation.js"></script>
+  <script src="newtab/newtab-effects.js"></script>
+  <script src="newtab/newtab-dragging.js"></script>
+  <script src="newtab/newtab-clock.js"></script>
+  <script src="newtab/newtab-weather.js"></script>
+  <script src="newtab/newtab-quote.js"></script>
+  <script src="newtab/newtab-focus-timer.js"></script>
+  <script src="newtab/newtab-bootstrap.js"></script>
+  <script src="actions.js"></script>
+  <script src="command-bar/fuzzy-search.js"></script>
+  <script src="command-bar/command-bar-history.js"></script>
+  <script src="command-bar/calculator-parser.js"></script>
+  <script src="command-bar/query-intent.js"></script>
+  <script src="overlay-search.js"></script>
+  <script src="overlay-card.js"></script>
+  <script src="command-bar/command-bar-bootstrap.js"></script>
+</body>
+</html>

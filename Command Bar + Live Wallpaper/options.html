@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Command Bar & Live Wallpaper — Settings</title>
+  <link rel="stylesheet" href="shared/design-tokens.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar" aria-label="Settings sections">
+      <div class="sidebar-title">
+        <div class="sidebar-title-main">Settings</div>
+        <div class="sidebar-title-sub">Command Bar & Live Wallpaper</div>
+      </div>
+      <label class="search-shell" for="settings-search"><span aria-hidden="true">⌕</span><input id="settings-search" class="settings-search" type="search" placeholder="Filter settings…" aria-label="Filter settings"></label>
+      <button class="nav-item active" data-section="library">
+        <span class="nav-icon" data-icon="library"></span>
+        <span>Wallpaper Library</span>
+      </button>
+      <button class="nav-item" data-section="effects">
+        <span class="nav-icon" data-icon="effects"></span>
+        <span>Playback & Effects</span>
+      </button>
+      <button class="nav-item" data-section="rotation">
+        <span class="nav-icon" data-icon="rotation"></span>
+        <span>Rotation & Schedule</span>
+      </button>
+      <button class="nav-item" data-section="widgets">
+        <span class="nav-icon" data-icon="widgets"></span>
+        <span>Widgets</span>
+      </button>
+      <button class="nav-item" data-section="commandbar">
+        <span class="nav-icon" data-icon="commandbar"></span>
+        <span>Command Bar</span>
+      </button>
+      <button class="nav-item" data-section="backup">
+        <span class="nav-icon" data-icon="backup"></span>
+        <span>Backup</span>
+      </button>
+      <button class="nav-item" data-section="about">
+        <span class="nav-icon" data-icon="about"></span>
+        <span>About</span>
+      </button>
+    </nav>
+
+    <main class="content">
+      <!-- Wallpaper Library -->
+      <section class="pane" id="pane-library">
+        <header class="pane-header">
+          <h1>Wallpaper Library</h1>
+          <p class="pane-sub">Upload media and choose what plays on your new tab page.</p>
+        </header>
+
+          <section class="card hero-card">
+          <div class="upload-area" id="upload-area">
+            <label for="wallpaper-input" class="btn primary-btn">Upload New Wallpaper</label>
+            <input type="file" id="wallpaper-input" accept="video/mp4,video/webm,image/gif,image/*" style="display:none;">
+            <span class="hint">Supports MP4, WebM, GIF, PNG, JPG</span>
+          </div>
+          <div id="wallpaper-preview" class="wallpaper-preview" aria-label="Wallpaper preview"></div>
+          <div id="wallpaper-list" class="wallpaper-list"></div>
+        </section>
+      </section>
+
+      <!-- Playback & Effects -->
+      <section class="pane" id="pane-effects" hidden>
+        <header class="pane-header">
+          <h1>Playback & Effects</h1>
+          <p class="pane-sub">Motion and image adjustments applied to whatever is playing.</p>
+        </header>
+
+        <section class="card">
+          <h2>Motion</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Ken Burns Effect</strong>
+              <div class="hint">Slow randomized pan & zoom on still-image wallpapers</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-ken-burns">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Mouse Parallax</strong>
+              <div class="hint">Wallpaper drifts subtly toward your cursor for a sense of depth</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-parallax">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Transition Duration</strong>
+              <div class="hint">Crossfade length when switching wallpapers</div>
+            </div>
+            <input type="range" id="input-transition" class="range-input" min="200" max="1500" step="50" value="600">
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Image Adjustments</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Video Playback Speed</strong>
+              <div class="hint">Adjust playback rate for dynamic videos</div>
+            </div>
+            <input type="range" id="input-speed" class="range-input" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Brightness</strong>
+              <div class="hint">Tweak image/video brightness</div>
+            </div>
+            <input type="range" id="input-brightness" class="range-input" min="30" max="150" step="5" value="100">
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Contrast</strong>
+              <div class="hint">Tweak image/video contrast</div>
+            </div>
+            <input type="range" id="input-contrast" class="range-input" min="30" max="150" step="5" value="100">
+          </div>
+        </section>
+      </section>
+
+      <!-- Rotation & Schedule -->
+      <section class="pane" id="pane-rotation" hidden>
+        <header class="pane-header">
+          <h1>Rotation & Schedule</h1>
+          <p class="pane-sub">Choose how the active wallpaper is picked.</p>
+        </header>
+
+        <section class="card">
+          <h2>Mode</h2>
+          <div class="segmented" id="wallpaper-mode-segmented">
+            <button class="segment active" data-mode="single">Single</button>
+            <button class="segment" data-mode="rotate">Rotate</button>
+            <button class="segment" data-mode="schedule">Day & Night</button>
+          </div>
+          <p class="hint" style="margin-top:10px;">
+            <strong>Single</strong> — always show the wallpaper marked Active in your Library.<br>
+            <strong>Rotate</strong> — cycle your whole library on a timer, in order or shuffled.<br>
+            <strong>Day & Night</strong> — one wallpaper by day, another after dark.
+          </p>
+        </section>
+
+        <section class="card" id="rotate-settings">
+          <h2>Rotate Settings</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Order</strong>
+              <div class="hint">How the library cycles</div>
+            </div>
+            <div class="segmented segmented-sm" id="rotation-order-segmented">
+              <button class="segment active" data-order="sequential">In order</button>
+              <button class="segment" data-order="shuffle">Shuffle</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Interval</strong>
+              <div class="hint">Minutes between wallpaper changes</div>
+            </div>
+            <input type="number" id="input-rotation-interval" class="number-input" min="1" max="720" value="30">
+          </div>
+        </section>
+
+        <section class="card" id="schedule-settings">
+          <h2>Day & Night Settings</h2>
+          <div class="setting-row">
+            <div><strong>Day Wallpaper</strong></div>
+            <select id="select-day-wallpaper" class="select-input"></select>
+          </div>
+          <div class="setting-row">
+            <div><strong>Night Wallpaper</strong></div>
+            <select id="select-night-wallpaper" class="select-input"></select>
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Use Sunrise / Sunset</strong>
+              <div class="hint">Requires the Weather widget's location to be set</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-use-suntimes">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row" id="manual-hours-row">
+            <div>
+              <strong>Manual Hours</strong>
+              <div class="hint">Day starts / night starts (24h)</div>
+            </div>
+            <div class="hour-inputs">
+              <input type="number" id="input-day-hour" class="number-input number-input-sm" min="0" max="23" value="7">
+              <span class="hint">→</span>
+              <input type="number" id="input-night-hour" class="number-input number-input-sm" min="0" max="23" value="19">
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- Widgets -->
+      <section class="pane" id="pane-widgets" hidden>
+        <header class="pane-header">
+          <h1>Widgets</h1>
+          <p class="pane-sub">Small pieces of information layered on top of your wallpaper.</p>
+        </header>
+
+        <section class="card">
+          <h2>Clock & Date</h2>
+          <div class="setting-row">
+            <div><strong>Show Clock</strong></div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-widget-clock">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div><strong>Show Date</strong></div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-widget-date">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div><strong>24-Hour Time Format</strong></div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-24hour">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+        </section>
+
+        <section class="card">
+          <h2>Weather</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Show Weather</strong>
+              <div class="hint">Powered by Open-Meteo — no account or API key</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-widget-weather">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div><strong>Location</strong></div>
+            <div class="segmented segmented-sm" id="weather-location-segmented">
+              <button class="segment active" data-loc="auto">Auto-detect</button>
+              <button class="segment" data-loc="manual">Manual city</button>
+            </div>
+          </div>
+          <div class="setting-row" id="weather-city-row">
+            <div><strong>City</strong></div>
+            <div class="city-input-wrap">
+              <input type="text" id="input-weather-city" class="text-input" placeholder="e.g. Houston, TX">
+              <button class="btn secondary-btn btn-sm" id="btn-weather-city-save">Save</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><strong>Units</strong></div>
+            <div class="segmented segmented-sm" id="weather-units-segmented">
+              <button class="segment active" data-units="f">°F</button>
+              <button class="segment" data-units="c">°C</button>
+            </div>
+          </div>
+          <div class="hint" id="weather-status"></div>
+        </section>
+
+        <section class="card">
+          <h2>Quote of the Day</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Show Quote</strong>
+              <div class="hint">A short quote, offline, changes every new tab</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-widget-quote">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Focus Timer</h2>
+          <div class="setting-row">
+            <div>
+              <strong>Show Focus Timer</strong>
+              <div class="hint">A simple Pomodoro-style work/break timer</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-widget-focus">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div><strong>Work Length</strong></div>
+            <input type="number" id="input-focus-work" class="number-input" min="1" max="180" value="25">
+            <span class="hint">min</span>
+          </div>
+          <div class="setting-row">
+            <div><strong>Break Length</strong></div>
+            <input type="number" id="input-focus-break" class="number-input" min="1" max="60" value="5">
+            <span class="hint">min</span>
+          </div>
+        </section>
+      </section>
+
+      <!-- Command Bar -->
+      <section class="pane" id="pane-commandbar" hidden>
+        <header class="pane-header">
+          <h1>Command Bar</h1>
+          <p class="pane-sub">Shortcut, search scope, and which palette actions are enabled.</p>
+        </header>
+
+        <section class="card">
+          <h2>Search & AI</h2>
+          <div class="setting-row">
+            <div><strong>Result limit</strong><div class="hint">How many matches appear in the palette</div></div>
+            <input id="input-result-limit" class="number-input" type="number" min="3" max="20" value="6">
+          </div>
+          <div class="setting-row">
+            <div><strong>Search suggestions</strong><div class="hint">Show remote suggestions while typing</div></div>
+            <label class="switch"><input id="toggle-suggestions" type="checkbox"><span class="slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><strong>Inline autocomplete</strong><div class="hint">Suggest a completion in the input field</div></div>
+            <label class="switch"><input id="toggle-autocomplete" type="checkbox"><span class="slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><strong>Search and AI routing</strong><div class="hint">Set your browser default to ChatGPT to use it for AI. Shift+Enter always opens Google.</div></div>
+            <fieldset class="routing-options" aria-label="Search and AI routing">
+              <label class="routing-option"><input type="radio" name="search-routing-mode" value="balanced" checked><span><strong>Balanced</strong><small>AI for questions and tasks. Google for web searches.</small></span></label>
+              <label class="routing-option"><input type="radio" name="search-routing-mode" value="prefer-ai"><span><strong>Prefer AI</strong><small>All ordinary searches use your browser default.</small></span></label>
+            </fieldset>
+            <select id="select-search-routing-mode" hidden aria-hidden="true" tabindex="-1"><option value="balanced">Balanced</option><option value="prefer-ai">Prefer AI</option></select>
+          </div>
+          <div class="setting-row">
+            <div><strong>Default explicit AI provider</strong><div class="hint">Provider used for q% and ai% prefixes</div></div>
+            <select id="select-ai-provider" class="select-input"><option value="perplexity">Perplexity</option></select>
+          </div>
+          <div class="setting-row">
+            <div><strong>Density</strong><div class="hint">Choose compact rows or more breathing room</div></div>
+            <select id="select-density" class="select-input"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="setting-row">
+            <div>
+              <strong>Command Bar Keyboard Shortcut</strong>
+              <div class="hint">Remap the key combination using browser settings</div>
+            </div>
+            <button id="btn-shortcuts" class="btn secondary-btn">Change Shortcut</button>
+          </div>
+          <div class="setting-row">
+            <div>
+              <strong>Search across all windows by default</strong>
+              <div class="hint">When enabled, tab searches include tabs from all open windows</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-all-windows">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="card commandbar-guide">
+          <h2>Using the Command Bar</h2>
+          <dl>
+            <div><dt>Enter</dt><dd>Search, or execute a selected result. Calculator and dictionary results can be copied; missing definitions open Apple Dictionary.</dd></div>
+            <div><dt>↑ / ↓ · Tab / Shift+Tab</dt><dd>Navigate results. Ctrl+J / Ctrl+K also move down and up.</dd></div>
+            <div><dt>→ / Tab · Backspace</dt><dd>Accept inline autocomplete with Right Arrow or Tab. Backspace cancels the selected completion.</dd></div>
+            <div><dt>Escape</dt><dd>Close the command bar. Its configured shortcut also toggles it.</dd></div>
+            <div><dt>Shift+Enter</dt><dd>Search with Google. Configured custom search shortcuts appear under Custom Search Engines below.</dd></div>
+            <div><dt>@history · @bookmarks</dt><dd>Search a specific source. Use /allwindows to include tabs from every window.</dd></div>
+            <div><dt>/ · math · define word</dt><dd>Find actions, enter an expression or solve command, or look up a definition.</dd></div>
+          </dl>
+        </section>
+
+        <section class="card">
+          <h2>Custom Search Engines</h2>
+          <p class="hint">Use Shift+Enter for Google. Ctrl/Alt/Meta+Enter can open configured custom engines. Plain Enter keeps the normal command-bar behavior.</p>
+          <div id="search-engines-list" class="search-engines-list"></div>
+          <div class="engine-editor" id="search-engine-editor" hidden>
+            <input id="engine-name" class="text-input" placeholder="Name (e.g. YouTube)" aria-label="Search engine name">
+            <input id="engine-url" class="text-input engine-url-input" placeholder="https://example.com/search?q={query} (q% also works)" aria-label="Search engine URL">
+            <input id="engine-trigger" class="text-input" placeholder="Trigger (optional, e.g. q%)" aria-label="Provider trigger">
+            <select id="engine-type" class="select-input" aria-label="Provider type"><option value="url">URL provider</option><option value="api">API adapter (coming soon)</option></select>
+            <select id="engine-shortcut" class="select-input" aria-label="Search engine shortcut">
+              <option value="">No shortcut</option><option value="ctrl+enter">Ctrl+Enter</option><option value="alt+enter">Alt+Enter</option><option value="meta+enter">Meta+Enter</option>
+            </select>
+            <label class="engine-enabled"><input id="engine-enabled" type="checkbox" checked> Enabled</label>
+            <label class="engine-enabled"><input id="engine-ai" type="checkbox"> AI provider</label>
+            <div class="engine-editor-actions"><button id="engine-save" class="btn primary-btn">Save Engine</button><button id="engine-cancel" class="btn secondary-btn">Cancel</button></div>
+            <p id="engine-status" class="status-msg" role="status"></p>
+          </div>
+          <button id="engine-add" class="btn secondary-btn">Add Search Engine</button>
+        </section>
+
+        <section class="card">
+          <h2>Palette Actions</h2>
+          <p class="hint">Enable or disable individual actions available in the <code>/</code> palette</p>
+          <div id="actions-list" class="actions-list"></div>
+        </section>
+      </section>
+
+      <!-- Backup -->
+      <section class="pane" id="pane-backup" hidden>
+        <header class="pane-header">
+          <h1>Backup</h1>
+          <p class="pane-sub">Export your settings so you can restore them later.</p>
+        </header>
+
+        <section class="card">
+          <div class="setting-row">
+            <div>
+              <strong>Export Configuration</strong>
+              <div class="hint">Export settings and disabled action profiles to JSON</div>
+            </div>
+            <button id="btn-export" class="btn secondary-btn">Export Profile</button>
+            <label for="input-import" class="btn secondary-btn">Import Profile</label>
+            <input id="input-import" type="file" accept="application/json,.json" hidden>
+          </div>
+          <p id="backup-status" class="status-msg" role="status"></p>
+        </section>
+      </section>
+
+      <!-- About -->
+      <section class="pane" id="pane-about" hidden>
+        <header class="pane-header">
+          <h1>About</h1>
+          <p class="pane-sub">Command Bar & Live Wallpaper</p>
+        </header>
+
+        <section class="card">
+          <div class="setting-row">
+            <div><strong>Version</strong></div>
+            <span id="about-version" class="hint"></span>
+          </div>
+          <p class="hint">
+            This extension requests broad permissions (all-sites access, tabs, history, bookmarks, downloads)
+            because the command bar needs to read and act on tabs across every site, and the new-tab page needs
+            unlimited local storage for large video wallpapers. Nothing leaves your machine — the weather widget
+            is the only feature that makes an external network request (to Open-Meteo, for forecast data only).
+          </p>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="actions.js"></script>
+  <script src="shared/storage-keys.js"></script>
+  <script src="shared/storage-defaults.js"></script>
+  <script src="shared/storage.js"></script>
+  <script src="shared/storage-migrations.js"></script>
+  <script src="shared/ui-feedback.js"></script>
+  <script src="shared/url-utils.js"></script>
+  <script src="shared/search-engines.js"></script>
+  <script src="shared/rotation.js"></script>
+  <script src="db.js"></script>
+  <script src="options/options-navigation.js"></script>
+  <script src="options/options-storage.js"></script>
+  <script src="options/options-wallpaper-library.js"></script>
+  <script src="options/options-effects-settings.js"></script>
+  <script src="options/options-rotation-settings.js"></script>
+  <script src="options/options-widget-settings.js"></script>
+  <script src="options/options-command-bar-settings.js"></script>
+  <script src="options/options-backup.js"></script>
+  <script src="options/options-bootstrap.js"></script>
+</body>
+</html>

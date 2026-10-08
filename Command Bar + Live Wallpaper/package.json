@@ -1,0 +1,8 @@
+{
+  "name": "command-bar-live-wallpaper",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check actions.js && node --check background/background-bootstrap.js && node --check newtab/newtab-bootstrap.js && node --check options/options-bootstrap.js && node --check command-bar/command-bar-bootstrap.js"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "manifest_version": 2,
+  "name": "Command Bar + Live Wallpaper",
+  "version": "1.5.0",
+  "description": "Personal MV2 extension providing an Arc-style command bar overlay and a customizable live-wallpaper new-tab page with rotation, day/night scheduling, and weather/quote/focus widgets.",
+  "icons": {
+    "16": "icons/dot-ring-16.png",
+    "32": "icons/dot-ring-32.png",
+    "48": "icons/dot-ring-48.png",
+    "128": "icons/dot-ring-128.png"
+  },
+  "browser_action": {
+    "default_title": "Open Command Bar",
+    "default_icon": {
+      "16": "icons/dot-ring-16.png",
+      "32": "icons/dot-ring-32.png"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvlT7xng+jQBPz1ST7qHVSQAeCDkPeaJi+RUSu9F18TtFJEne6p1dSpKfVJAdnVCiPonmJY2x/mTIqZ5oWCWf/6PrrXWn1sL4cV/WKsZxx1LGx4f8mEOzDOUUtGxQ7UbbZvUihIsKx5IRy+KVF0wFrxtT19qy/3T+clPvmAVdvrnReCdrWWVQU9tp/j7WDtm4ReSc598bL0u9f4b4fR4tPE1IUIBn0M3xP7yxYCAw5mfA7WR5pWYrZvqQv+sV8a4fPgl3cWyEbChASkPsJbJ3QqVDYMBsEQ4ZKNyiIcdBkenvdLgLgA8CA8wJOY+NPKv+e3riIT3cljwrM7hYeJbzEwIDAQAB",
+  "background": {
+    "scripts": [
+      "background/background-icon.js",
+      "actions.js",
+      "shared/storage-keys.js",
+      "shared/storage-defaults.js",
+      "shared/storage.js",
+      "shared/storage-migrations.js",
+      "shared/url-utils.js",
+      "shared/search-engines.js",
+      "shared/rotation.js",
+      "background/background-frecency.js",
+      "background/background-script-injection.js",
+      "background/background-tab-actions.js",
+      "background/background-suggestions.js",
+      "background/background-dictionary.js",
+      "background/background-messaging.js",
+      "background/background-bootstrap.js"
+    ],
+    "persistent": false
+  },
+  "web_accessible_resources": [
+    "overlay-styles.css"
+  ],
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "options_page": "options.html",
+  "omnibox": {
+    "keyword": "k"
+  },
+  "commands": {
+    "toggle-command-bar": {
+      "suggested_key": {
+        "default": "Ctrl+K",
+        "mac": "Command+K"
+      },
+      "description": "Toggle Command Bar Overlay"
+    }
+  },
+  "permissions": [
+    "tabs",
+    "search",
+    "sessions",
+    "history",
+    "bookmarks",
+    "storage",
+    "alarms",
+    "unlimitedStorage",
+    "downloads",
+    "activeTab",
+    "<all_urls>"
+  ]
+}

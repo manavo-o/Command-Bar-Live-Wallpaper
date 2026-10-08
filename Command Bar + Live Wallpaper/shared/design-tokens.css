@@ -1,0 +1,59 @@
+:root {
+  --ui-accent: #0a84ff;
+  --ui-accent-strong: #0071e3;
+  --ui-success: #30d158;
+  --ui-danger: #ff453a;
+  --ui-radius-sm: 10px;
+  --ui-radius-md: 16px;
+  --ui-radius-lg: 24px;
+  --ui-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ui-ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-shadow-float: 0 18px 50px rgba(0, 0, 0, 0.22), 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ui-page: #f5f5f7;
+    --ui-surface: rgba(255, 255, 255, 0.78);
+    --ui-surface-strong: rgba(255, 255, 255, 0.94);
+    --ui-border: rgba(0, 0, 0, 0.10);
+    --ui-text: #1d1d1f;
+    --ui-muted: rgba(29, 29, 31, 0.60);
+    --ui-subtle: rgba(29, 29, 31, 0.40);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ui-page: #101014;
+    --ui-surface: rgba(34, 34, 39, 0.72);
+    --ui-surface-strong: rgba(42, 42, 48, 0.92);
+    --ui-border: rgba(255, 255, 255, 0.11);
+    --ui-text: #f5f5f7;
+    --ui-muted: rgba(245, 245, 247, 0.62);
+    --ui-subtle: rgba(245, 245, 247, 0.40);
+  }
+}
+
+button, input, select { -webkit-tap-highlight-color: transparent; }
+
+:where(button, input, select, a):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ui-accent) 68%, transparent);
+  outline-offset: 3px;
+}
+
+:where(button, .btn, .segment, .nav-item, .action-item) {
+  transition: transform 180ms var(--ui-ease-spring), filter 180ms var(--ui-ease-spring),
+    background-color 180ms var(--ui-ease-spring), border-color 180ms var(--ui-ease-spring),
+    box-shadow 180ms var(--ui-ease-spring);
+}
+
+:where(button, .btn, .segment, .nav-item, .action-item):active {
+  transform: scale(0.975);
+  filter: brightness(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, .btn, .segment, .nav-item, .action-item) { transition: none; }
+  :where(button, .btn, .segment, .nav-item, .action-item):active { transform: none; }
+}
