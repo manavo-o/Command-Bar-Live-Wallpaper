@@ -14,6 +14,13 @@
   opacity: 1; visibility: visible; pointer-events: auto;
 }
 .overlay-backdrop.exiting { visibility: visible; }
+/* Explicitly update composited surfaces too. Inheriting visibility across their
+   animation layers can leave them hidden after a host-page hover repaint. */
+.overlay-backdrop .input-wrapper, .overlay-backdrop .results-panel { visibility: hidden; }
+.overlay-backdrop.visible .input-wrapper,
+.overlay-backdrop.visible .results-panel,
+.overlay-backdrop.exiting .input-wrapper,
+.overlay-backdrop.exiting .results-panel { visibility: visible; }
 .modal-box {
   width: min(740px, 100%); max-height: 100%; min-height: 0;
   display: flex; flex-direction: column; gap: 12px;
@@ -22,10 +29,9 @@
    Releasing an opacity layer at 1 can change the glass sampling in one frame. */
 .input-wrapper, .results-panel { transform-origin: top center; will-change: transform, opacity; }
 .input-wrapper, .results-panel {
-  background: linear-gradient(160deg, rgba(43, 44, 48, 0.92), rgba(25, 26, 30, 0.88));
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.18), 0 18px 48px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(24px) saturate(115%);
+  background: linear-gradient(160deg, rgba(21, 21, 22, 0.97), rgba(12, 12, 13, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(255, 255, 255, 0.025), 0 14px 40px rgba(0, 0, 0, 0.28);
 }
 .input-wrapper {
   flex-shrink: 0; display: flex; align-items: center;
@@ -36,38 +42,45 @@
   border: none; outline: none; color: #fff; font: inherit;
   font-size: 22px; line-height: 1.4; font-weight: 400;
 }
-.input-field::placeholder { color: rgba(255, 255, 255, 0.42); font-size: 16px; }
+.input-field::placeholder { color: rgba(255, 255, 255, 0.42); font-size: 22px; }
 .input-field::selection { background: rgba(10, 132, 255, 0.55); color: #fff; }
 .results-panel {
-  border-radius: 28px; overflow: hidden; min-height: 0;
+  box-sizing: border-box; border-radius: 28px; overflow: hidden; min-height: 0;
   display: flex; flex-direction: column;
 }
 .content-body { display: flex; min-height: 0; overflow: hidden; }
 .results-container { flex: 1; min-width: 0; max-height: min(520px, 58vh); overflow-y: auto; overscroll-behavior: contain; }
 .results-container::-webkit-scrollbar { width: 6px; }
-.results-container::-webkit-scrollbar-thumb-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
-.results-list { width: 100%; margin: 0; padding: 12px; list-style: none; box-sizing: border-box; }
-.history-group-header { padding: 10px 16px 6px; color: rgba(255,255,255,0.48); font-size: 12px; font-weight: 500; }
+.results-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }
+.results-track { position: relative; isolation: isolate; }
+.selection-highlight {
+  position: absolute; pointer-events: none; border-radius: 16px;
+  background: rgba(255,255,255,0.085);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
+}
+.selection-highlight[hidden] { display: none; }
+.results-list { position: relative; width: 100%; margin: 0; padding: 12px; list-style: none; box-sizing: border-box; }
+.history-group-header { padding: 10px 16px 6px; color: rgba(255,255,255,0.58); font-size: 12px; font-weight: 500; }
 .result-item {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  box-sizing: border-box; min-height: 68px; padding: 12px 16px; border-radius: 18px;
+  box-sizing: border-box; min-height: 68px; padding: 12px 16px; border-radius: 16px;
   cursor: pointer; color: rgba(255,255,255,0.92); font-size: 16px; user-select: none;
   transition: background-color 140ms ease, color 140ms ease;
 }
 .result-item:hover:not(.selected) { background: rgba(255,255,255,0.045); }
-.result-item.selected { background: rgba(255,255,255,0.10); color: #fff; }
+.result-item.selected { color: #fff; }
 .result-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
 .result-icon { width: 28px; height: 28px; flex-shrink: 0; border-radius: 7px; object-fit: contain; }
 .result-text { min-width: 0; flex: 1; }
 .result-heading { display: flex; align-items: center; min-width: 0; gap: 4px; }
 .result-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; line-height: 1.4; }
-.result-sub { display: block; margin-top: 3px; color: rgba(255,255,255,0.48); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-sub { display: block; margin-top: 3px; color: rgba(255,255,255,0.58); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-item.selected .result-sub { color: rgba(255,255,255,0.62); }
 .match-highlight { background: rgba(255,255,255,0.12); color: #fff; border-radius: 3px; padding: 0 1px; }
 .status-icon { width: 12px; height: 12px; fill: currentColor; opacity: 0.65; flex-shrink: 0; }
 .badge-container { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; max-width: 28%; }
-.result-badge { font-size: 10px; padding: 3px 7px; border-radius: 6px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.50); font-weight: 500; }
-.result-item.selected .result-badge { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.75); }
+.result-badge { font-size: 11px; padding: 3px 0; color: rgba(255,255,255,0.55); font-weight: 500; }
+.result-item.selected .result-badge { color: rgba(255,255,255,0.75); }
 [data-density="compact"] .result-item { min-height: 48px; padding-top: 7px; padding-bottom: 7px; }
 [data-density="compact"] .result-icon { width: 24px; height: 24px; }
 .empty-state { cursor: default; }
@@ -81,7 +94,7 @@
 }
 
 .result-item-card.selected {
-  background: rgba(255, 255, 255, 0.10);
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.85);
 }
@@ -150,7 +163,7 @@
   .overlay-backdrop { padding: 32px 8px 16px; }
   .input-wrapper { padding: 18px 22px; }
   .input-field { font-size: 20px; }
-  .input-field::placeholder { font-size: 13px; }
+  .input-field::placeholder { font-size: 20px; }
   .results-panel { border-radius: 24px; }
   .results-list { padding: 8px; }
   .result-item { padding-left: 12px; padding-right: 12px; gap: 8px; }
@@ -164,3 +177,138 @@
   .overlay-backdrop, .overlay-backdrop.visible, .modal-box, .overlay-backdrop.visible .modal-box,
   .result-item, .result-item-card, .apple-dict-btn { transition: none; }
 }
+
+/* Math layout stays inside the card; long expressions scroll horizontally. */
+.math-card-value, .math-card-expr { max-width: 100%; min-width: 0; overflow-x: auto; padding-block: 4px; }
+[role="math"] { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; white-space: nowrap; word-break: normal; line-height: 1.6; }
+.math-node { display: inline; }
+.math-fraction { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin-inline: .18em; line-height: 1.2; }
+.math-fraction-part { display: block; padding: .08em .2em; }
+.math-fraction-part + .math-fraction-part { border-top: 1px solid currentColor; }
+.math-exponent { font-size: .72em; vertical-align: super; line-height: 1; }
+.math-radicand { border-top: 1px solid currentColor; padding: .08em .12em 0; }
+
+/* Optical material lives behind the protected iframe. These surfaces retain
+   only content and edge detail; the outer plates supply tint, blur and depth. */
+.overlay-backdrop { background: transparent; }
+.input-wrapper, .results-panel {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.input-wrapper { position: relative; }
+.selection-highlight {
+  background: linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.075));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 2px 6px rgba(0,0,0,.035);
+  border-radius: 18px;
+}
+.input-field { caret-color: #f8fbff; }
+.card-content { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; }
+.empty-state { color: rgba(255,255,255,.58); }
+@media (prefers-contrast: more) {
+  .input-field, .result-item, .result-sub, .result-badge { color: #fff; }
+  .selection-highlight { outline: 1px solid #fff; background: rgba(255,255,255,.2); }
+}
+@media (forced-colors: active) {
+  .input-field, .result-item, .result-sub, .result-badge { color: CanvasText; }
+  .selection-highlight { outline: 1px solid Highlight; }
+}
+
+/* Focused answers share one enclosure with the input, as in Spotlight. */
+.modal-box[data-answer="true"] { gap: 0; }
+[data-answer="true"] .input-wrapper { border-radius: 40px 40px 0 0; }
+[data-answer="true"] .results-panel { border-radius: 0 0 40px 40px; }
+[data-answer="true"] .results-list { padding: 4px 20px 20px; }
+[data-answer="true"] .result-item-card {
+  position: relative; border: none; border-radius: 26px; margin: 0;
+  background: rgba(255,255,255,.13); padding: 16px 22px;
+}
+[data-answer="true"] .selection-highlight { background: transparent; box-shadow: none; }
+[data-answer="true"][data-expanded="false"] .results-list > :not(:first-child) { display: none; }
+[data-answer="true"] .result-item-card .card-badge.math,
+[data-answer="true"] .result-item-card .card-action-hint { display: none; }
+[data-answer="true"] .math-card-expr { order: -1; padding: 0; font-family: inherit; color: rgba(255,255,255,.55); }
+[data-answer="true"] .math-card-expr [role="math"] { font-family: inherit; line-height: 1.3; }
+[data-answer="true"] .math-card-value { margin: 0; padding: 0; font-size: 24px; font-weight: 500; }
+.dict-preview { display: flex; align-items: center; gap: 20px; width: 100%; }
+.dict-preview-icon {
+  flex: 0 0 48px; height: 48px; display: grid; place-items: center;
+  font: 28px Georgia, serif; border-radius: 13px;
+  background: linear-gradient(#232325,#080809); box-shadow: inset 0 1px 1px #ffffff30,0 2px 5px #0003;
+}
+.dict-preview-body { flex: 1; min-width: 0; line-height: 1.4; }
+.dict-preview-title { font-size: 16px; font-weight: 500; }
+.dict-preview-definition { font-size: 15px; color: rgba(255,255,255,.72); overflow-wrap: anywhere; }
+.dict-preview-source { font-size: 14px; color: rgba(255,255,255,.4); }
+.dict-preview-details { width: 100%; margin-top: 8px; font-size: 12px; color: rgba(255,255,255,.55); }
+.dict-preview-details summary { cursor: pointer; padding: 4px 0; }
+.dict-preview-details summary:focus-visible { outline: 2px solid #9acbff; outline-offset: 3px; }
+.dict-full-details { padding-top: 12px; }
+.answer-results-toggle {
+  align-self: center; flex-shrink: 0; margin-top: 12px; padding: 11px 22px; border-radius: 999px;
+  color: #f5f5f7; font: inherit; font-size: 14px; cursor: pointer;
+  background: linear-gradient(#242426,#151517); border: 1px solid #ffffff24;
+  box-shadow: inset 0 1px 0 #ffffff0c,0 6px 16px #0003;
+}
+.answer-results-toggle:hover { background: #303032; }
+.answer-results-toggle:focus-visible { outline: 2px solid #9acbff; outline-offset: 3px; }
+@media(max-width:560px) {
+  [data-answer="true"] .results-list { padding: 4px 12px 12px; }
+  [data-answer="true"] .result-item-card { padding: 14px 16px; }
+  .dict-preview { gap: 12px; }
+}
+[data-answer="true"] .result-item-card:has(.answer-copy) { padding-right: 70px; }
+.answer-copy {
+  position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 34px; height: 34px; padding: 8px;
+  border: 0; border-radius: 50%; background: #ffffff20; color: #f5f5f7; cursor: pointer;
+}
+.answer-copy svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.answer-copy:hover { background: #ffffff35; }
+.answer-copy:focus-visible { outline: 2px solid #9acbff; outline-offset: 3px; }
+[data-answer="true"] .math-card-value { font-family: inherit; line-height: 1.3; }
+.caret-mirror { position: absolute; visibility: hidden; white-space: pre; pointer-events: none; }
+.caret-aura {
+  position: absolute; width: 2px; border-radius: 2px; pointer-events: none;
+  background: #f8fbff;
+  box-shadow: 0 0 5px 2px #e2f4ffff, 0 0 13px 4px #b4dbffb3, 0 0 22px 6px #9acbff55;
+  animation: caret-blink 1.1s steps(1, end) infinite;
+}
+.caret-aura[hidden] { display: none; }
+@media(prefers-contrast:more),(forced-colors:active) { .caret-aura { display: none; } }
+
+/* AI is an inline action; suggestions retain their own surface. */
+.results-panel[hidden] { display: none; }
+.ai-submit {
+  flex: 0 0 36px; width: 36px; height: 36px; margin: -3px 0 -3px 16px;
+  display: grid; place-items: center; border: 1px solid #ffffff30;
+  border-radius: 50%; background: #ffffff0d; color: #f8fbff; cursor: pointer;
+}
+.ai-submit svg { width: 23px; height: 23px; }
+.ai-submit:hover { background: #ffffff25; }
+.ai-submit:focus-visible { outline: 2px solid #b4dbff; outline-offset: 3px; }
+.ai-ripple { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; display: none; }
+[data-ai="true"] .ai-ripple { display: block; box-shadow: inset 0 0 0 1px #d2ecff45, 0 0 12px #b4dbff18; }
+.ai-ripple::before, .ai-ripple::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: 1px solid #d2ecff85; opacity: 0; pointer-events: none;
+}
+.overlay-backdrop.visible:not([data-page-hidden="true"]) [data-ai="true"] .ai-ripple::before,
+.overlay-backdrop.visible:not([data-page-hidden="true"]) [data-ai="true"] .ai-ripple::after {
+  animation: ai-reverberation 2s ease-out infinite;
+}
+.overlay-backdrop.visible:not([data-page-hidden="true"]) [data-ai="true"] .ai-ripple::after { animation-delay: 1s; }
+@keyframes ai-reverberation {
+  0% { transform: scale(1); opacity: .55; }
+  100% { transform: scale(1.025, 1.2); opacity: 0; }
+}
+@media(prefers-reduced-motion:reduce),(prefers-contrast:more),(forced-colors:active) {
+  .ai-ripple::before, .ai-ripple::after { animation: none !important; }
+}
+@media(prefers-contrast:more),(forced-colors:active) {
+  [data-ai="true"] .ai-ripple { box-shadow: none; outline: 1px solid currentColor; }
+  .ai-submit { color: ButtonText; background: ButtonFace; border-color: ButtonText; }
+}
+
+@keyframes caret-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@media(prefers-reduced-motion:reduce) { .caret-aura { animation: none; } }

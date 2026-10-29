@@ -6,24 +6,21 @@ const radios = ['balanced', 'prefer-ai'].map(value => ({ value, checked: false, 
 const stored = [];
 let storageListener;
 const selector = { value: '' };
-const context = { document: { querySelectorAll: () => radios }, selectSearchRoutingMode: selector,
+const context = { saveSettings: value => stored.push(value), document: { querySelectorAll: () => radios }, selectSearchRoutingMode: selector,
   chrome: { storage: { local: { set: value => stored.push(value) }, onChanged: { addListener: fn => { storageListener = fn; } } } } };
 vm.createContext(context);
 const start = source.indexOf('  const routingRadios');
-const end = source.indexOf("  selectAiProvider.addEventListener", start);
+const end = source.indexOf("  selectDensity.addEventListener", start);
 vm.runInContext(source.slice(start, end), context);
 context.syncRoutingMode(undefined);
-assert.equal(selector.value, 'balanced');
 assert.equal(radios[0].checked, true);
 radios[1].checked = true;
 radios[1].change();
-assert.equal(selector.value, 'prefer-ai');
 assert.equal(stored[0].searchRoutingMode, 'prefer-ai');
 assert.equal(radios[0].checked, false);
 storageListener({ searchRoutingMode: { newValue: 'balanced' } }, 'local');
 assert.equal(radios[0].checked, true);
 assert.equal(radios[1].checked, false);
 storageListener({ searchRoutingMode: { newValue: 'prefer-ai' } }, 'sync');
-assert.equal(selector.value, 'balanced');
 const html = fs.readFileSync(require.resolve('../options.html'), 'utf8');
 assert.ok(html.indexOf('id="pane-commandbar"') < html.indexOf('name="search-routing-mode"'), 'Search controls belong to Command Bar settings');

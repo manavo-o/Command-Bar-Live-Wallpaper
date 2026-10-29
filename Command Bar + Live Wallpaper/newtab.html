@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>New Tab</title>
   <!-- Styles moved to newtab/newtab.css; keep this page MV2-compatible. -->
   <link rel="stylesheet" href="shared/design-tokens.css">
@@ -12,30 +13,40 @@
   <div class="contrast-scrim" aria-hidden="true"></div>
   <canvas id="fx-canvas" class="fx-canvas"></canvas>
 
-  <div id="widgets-container" class="widgets-container" style="display: none;">
-    <div id="widget-clock" class="widget-clock"></div>
-    <div id="widget-date" class="widget-date"></div>
-  </div>
-
-  <div id="widget-weather" class="glass-card widget-surface" aria-label="Weather">
-    <div class="weather-temp" id="weather-temp">--°</div>
-    <div class="weather-desc" id="weather-desc">Loading weather…</div>
-    <div class="weather-place" id="weather-place"></div>
-  </div>
-
-  <div id="widget-quote" class="glass-card widget-surface" aria-label="Quote of the day">
-    <span id="quote-text">“…”</span>
-    <span class="quote-author" id="quote-author"></span>
-  </div>
-
-  <div id="widget-focus" class="glass-card widget-surface" aria-label="Focus timer">
-    <div class="focus-mode-label" id="focus-mode-label">Focus</div>
-    <div class="focus-time" id="focus-time">25:00</div>
-    <div class="focus-controls">
-      <button class="focus-btn" id="focus-btn-toggle" type="button">Start</button>
-      <button class="focus-btn" id="focus-btn-reset" type="button">Reset</button>
+  <section id="widget-dashboard" class="widget-dashboard" aria-label="Your dashboard" hidden>
+    <div class="dashboard-toolbar">
+      <button id="dashboard-handle" class="dashboard-handle" type="button" aria-label="Move dashboard. Use arrow keys; Shift for larger steps. Enter saves; Escape cancels." aria-describedby="dashboard-move-status">
+        <svg viewBox="0 0 24 16" aria-hidden="true"><path d="M4 5h16M4 11h16"/></svg><span>Dashboard</span>
+      </button>
+      <a class="dashboard-settings" href="options.html#widgets" aria-label="Customize widgets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/></svg></a>
     </div>
-  </div>
+    <div id="widgets-container" class="widgets-container" style="display: none;">
+      <div id="widget-clock" class="widget-clock"></div>
+      <div id="widget-date" class="widget-date"></div>
+    </div>
+    <div class="dashboard-grid">
+      <div id="widget-weather" class="glass-card widget-surface" aria-label="Weather">
+        <div class="widget-eyebrow">Outside</div>
+        <div class="weather-reading"><svg id="weather-condition-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6L7 7m10 10 1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0"/></svg><div class="weather-temp" id="weather-temp">--°</div></div>
+        <div class="weather-desc" id="weather-desc" role="status">Loading weather…</div>
+        <div class="weather-place" id="weather-place"></div>
+      </div>
+      <div id="widget-focus" class="glass-card widget-surface" aria-label="Focus timer">
+        <div class="focus-mode-label widget-eyebrow" id="focus-mode-label">Focus</div>
+        <div class="focus-time" id="focus-time">25:00</div>
+        <div class="focus-controls">
+          <button class="focus-btn primary-focus" id="focus-btn-toggle" type="button">Start</button>
+          <button class="focus-btn" id="focus-btn-reset" type="button">Reset</button>
+        </div>
+      </div>
+      <div id="widget-quote" class="glass-card widget-surface" aria-label="Quote of the day">
+        <svg class="quote-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h6v8H2v-8c0-5 2-7 7-8v3c-3 1-5 2-5 5 M16 12h6v8h-8v-8c0-5 2-7 7-8v3c-3 1-5 2-5 5"/></svg>
+        <span id="quote-text">“…”</span>
+        <span class="quote-author" id="quote-author"></span>
+      </div>
+    </div>
+    <span id="dashboard-move-status" class="visually-hidden" role="status"></span>
+  </section>
 
   <div id="fallback-ui" class="fallback-msg" style="display: none;">
     <div class="fallback-icon" aria-hidden="true">✦</div>
@@ -43,31 +54,24 @@
     <p><a href="options.html">Open Options to upload or select a wallpaper</a></p>
   </div>
 
-  <script src="shared/storage-keys.js"></script>
-  <script src="shared/storage-defaults.js"></script>
   <script src="shared/storage.js"></script>
+  <script src="shared/search-engines.js"></script>
   <script src="shared/storage-migrations.js"></script>
   <script src="shared/ui-feedback.js"></script>
-  <script src="shared/url-utils.js"></script>
-  <script src="shared/search-engines.js"></script>
   <script src="shared/rotation.js"></script>
   <script src="db.js"></script>
-  <script src="newtab/newtab-media.js"></script>
-  <script src="newtab/newtab-rotation.js"></script>
-  <script src="newtab/newtab-effects.js"></script>
-  <script src="newtab/newtab-dragging.js"></script>
-  <script src="newtab/newtab-clock.js"></script>
-  <script src="newtab/newtab-weather.js"></script>
-  <script src="newtab/newtab-quote.js"></script>
-  <script src="newtab/newtab-focus-timer.js"></script>
+  <script src="newtab/widget-dashboard.js"></script>
   <script src="newtab/newtab-bootstrap.js"></script>
   <script src="actions.js"></script>
   <script src="command-bar/fuzzy-search.js"></script>
+  <script src="command-bar/command-bar-results.js"></script>
   <script src="command-bar/command-bar-history.js"></script>
   <script src="command-bar/calculator-parser.js"></script>
   <script src="command-bar/query-intent.js"></script>
   <script src="overlay-search.js"></script>
+  <script src="command-bar/math-renderer.js"></script>
   <script src="overlay-card.js"></script>
+  <script src="command-bar/command-bar-view.bundle.js"></script>
   <script src="command-bar/command-bar-bootstrap.js"></script>
 </body>
 </html>

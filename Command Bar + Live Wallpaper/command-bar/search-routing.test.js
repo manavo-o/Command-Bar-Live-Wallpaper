@@ -4,10 +4,10 @@ const vm = require('node:vm');
 const intent = require('./query-intent');
 const engines = require('../shared/search-engines');
 const source = fs.readFileSync(require.resolve('./command-bar-bootstrap.js'), 'utf8');
-const routing = source.slice(source.indexOf('  function customSearchForEvent'), source.indexOf('  function aiProviders'));
+const routing = source.slice(source.indexOf('  function customSearchForEvent'), source.indexOf('  function renderAiResults'));
 const messages = [];
 const context = {
-  window: { CommandBarIntent: intent }, CommandBarSearchEngines: engines,
+  URL, window: { CommandBarIntent: intent }, CommandBarSearchEngines: engines,
   customSearchEngines: [{ id: 'legacy', name: 'Legacy', url: 'https://legacy.test/?q=', shortcut: 'shift+enter' }, { id: 'custom', name: 'Custom', url: 'https://custom.test/?q=', shortcut: 'ctrl+enter' }],
   searchRoutingMode: 'balanced', recordCommandUsage() {}, hideOverlay() {},
   safeSendMessage(message) { messages.push(message); }
@@ -51,3 +51,26 @@ const bootstrapScript = newtab.indexOf('src="command-bar/command-bar-bootstrap.j
 assert.ok(intentScript >= 0 && intentScript < bootstrapScript, 'New-tab page loads intent helper before command bar');
 const background = fs.readFileSync(require.resolve('../background/background-bootstrap.js'), 'utf8');
 assert.ok(background.indexOf("'command-bar/query-intent.js'") < background.indexOf("'command-bar/command-bar-bootstrap.js'"), 'Injected command bar loads intent helper first');
+
+// Plain Enter commits the displayed math/dictionary card without arrow navigation.
+context.e = { key: 'Enter' };
+context.autocompleteActive = false;
+context.explicitSelection = false;
+let executed;
+context.executeResult = item => { executed = item; };
+for (const type of ['CALC', 'DEF', 'AI']) {
+  context.currentResults = [{ type }];
+  executed = null;
+  vm.runInContext('(function () {' + enter + '\n})()', context);
+  assert.equal(executed.type, type);
+}
+
+for (const mode of ['balanced', 'prefer-ai']) {
+  context.searchRoutingMode = mode;
+  for (const [query, url] of [['gmail.com','https://gmail.com/'], ['https://example.com/a?q=1#b','https://example.com/a?q=1#b'], ['localhost:3000','https://localhost:3000/']]) {
+    assert.equal(submit(query).url, url);
+    assert.equal(submit(query).visitKind, 'typed');
+    assert.ok(submit(query, {shiftKey:true}).url.startsWith('https://www.google.com/search?'));
+    assert.ok(submit(query, {ctrlKey:true}).url.startsWith('https://custom.test/'));
+  }
+}

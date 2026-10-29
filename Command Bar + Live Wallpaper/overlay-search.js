@@ -9,9 +9,7 @@
     fuzzyMatchPositions: fuzzy.fuzzyMatchPositions,
     calculateCompositeScore: fuzzy.calculateCompositeScore,
     evaluateCalc: calculator.evaluate,
-    evaluateCalcDetailed: calculator.evaluateDetailed,
-    looksLikeMath: calculator.looksLikeMath,
-    toLatex: calculator.toLatex
+    shouldPromoteSuggestions: fuzzy.shouldPromoteSuggestions
   };
   root.OverlaySearch = api;
   if (typeof module === 'object' && module.exports) module.exports = api;

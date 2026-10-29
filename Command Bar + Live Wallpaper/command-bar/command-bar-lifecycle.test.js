@@ -6,7 +6,7 @@ const source = fs.readFileSync('command-bar/command-bar-bootstrap.js', 'utf8');
 function harness(reduced = false) {
   let cleared = 0, blurred = 0;
   const animations = [];
-  function surface() { return { animate(keyframes, options) {
+  function surface() { return { style: {}, animate(keyframes, options) {
     let resolve, reject;
     const animation = { keyframes, options, cancelled: false, finished: new Promise((a, b) => { resolve = a; reject = b; }),
       complete() { resolve(); }, cancel() { this.cancelled = true; reject(new Error("cancelled")); } };
@@ -15,16 +15,18 @@ function harness(reduced = false) {
   const timers = new Map();
   let nextTimer = 0;
   const ctx = vm.createContext({
+    caretAura: { setActive() {}, dispose() {} },
+    decorations: { setActive() {}, track() {}, sync() {} },
     isVisible: true, queryGeneration: 7, currentQueryToken: 7,
     searchDebounceTimer: null, suggestDebounceTimer: null, exitCleanupTimer: null,
-    motionAnimations: [], motionGeneration: 0, openGeneration: 0, inputWrapper: surface(), resultsPanel: surface(),
+    hostDocument: { timeline: {} }, openingMotionTimer: null, motionAnimations: [], motionGeneration: 0, openGeneration: 0, inputWrapper: surface(), resultsPanel: surface(),
     stylesReady: true, window: { matchMedia: () => ({ matches: reduced }) },
     setTimeout(fn) { timers.set(++nextTimer, fn); return nextTimer; },
     clearTimeout(id) { timers.delete(id); },
     backdrop: { ...surface(), inert: false, classList: { remove() {}, add() {} }, setAttribute() {}, removeAttribute() {},
       },
     frame: { contentWindow: { getComputedStyle() { return { transform: 'matrix(0.98, 0, 0, 0.98, 0, -4)', opacity: '0.6' }; }, DOMMatrixReadOnly: class { constructor() { this.a = 0.98; this.m42 = -4; } } }, style: {}, setAttribute() {}, removeAttribute() {} }, shadow: { activeElement: { blur() { blurred++; } } }, input: { value: 'query' },
-    clearResultNodes() { cleared++; }, clearAutocomplete() {}, resetSessionCaches() {}, safeSendMessage() {},
+    cancelResultMotion() {}, clearResultNodes() { cleared++; }, clearAutocomplete() {}, resetSessionCaches() {}, safeSendMessage() {},
   });
   vm.runInContext(source.slice(source.indexOf('  // Read before cancelling'), source.indexOf("  window.addEventListener('pagehide'")), ctx);
   return { ctx, timers, animations, get cleared() { return cleared; }, get blurred() { return blurred; },
@@ -84,8 +86,8 @@ test('spring starts at captured state on reversal and settles exactly', () => {
 });
 test('fresh opening staggers surfaces and reduced motion creates no animations', () => {
   const h = harness(); h.ctx.animateOverlay(true);
-  assert.equal(h.animations[1].options.duration, 460);
-  assert.equal(h.animations[2].options.delay, 25);
+  assert.equal(h.animations[1].options.duration, 320);
+  assert.equal(h.animations[2].options.delay, 16);
   const reduced = harness(true); reduced.ctx.animateOverlay(true);
   assert.equal(reduced.animations.length, 0);
 });
@@ -146,7 +148,7 @@ test('surface opacity eases continuously through the longer opening fade', () =>
   assert.ok(frames[20].opacity > 0 && frames[20].opacity < 1);
   assert.ok(frames.every((frame, i) => i === 0 || frame.opacity >= frames[i - 1].opacity));
   assert.equal(frames.at(-1).opacity, 1);
-  assert.equal(h.animations[0].options.duration, 280);
+  assert.equal(h.animations[0].options.duration, 180);
 });
 test('stylesheet failure reveals a usable fallback and late load does not replay entrance', () => {
   const h = harness(); let focuses = 0;
@@ -158,4 +160,31 @@ test('stylesheet failure reveals a usable fallback and late load does not replay
   assert.match(h.ctx.criticalStyle.textContent, /\.modal-box/); assert.equal(focuses, 1);
   const count = h.animations.length; h.ctx.finishStyleLoading();
   assert.equal(h.animations.length, count); assert.equal(focuses, 1);
+});
+
+test('stalled opening is settled by watchdog with visible surfaces and no retained effects', async () => {
+  const h = harness(); h.ctx.animateOverlay(true);
+  assert.equal(h.timers.size, 1);
+  assert.equal(h.animations[1].options.timeline, h.ctx.hostDocument.timeline);
+  h.flush();
+  assert.equal(h.ctx.inputWrapper.style.opacity, '1');
+  assert.equal(h.ctx.resultsPanel.style.opacity, '1');
+  assert.equal(h.ctx.resultsPanel.style.transform, 'none');
+  assert.equal(h.ctx.motionAnimations.length, 0); assert.equal(h.timers.size, 0);
+  assert.ok(h.animations.every(animation => animation.cancelled));
+  await h.complete(); assert.equal(h.cleared, 0);
+});
+test('unexpected opening animation cancellation recovers instead of leaving an invisible bar', async () => {
+  const h = harness(); h.ctx.animateOverlay(true); h.animations[1].cancel();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.ctx.resultsPanel.style.opacity, '1');
+  assert.equal(h.ctx.motionAnimations.length, 0); assert.equal(h.timers.size, 0);
+});
+test('old opening watchdog cannot settle or reveal a dismissed or newer session', () => {
+  const h = harness(); h.ctx.animateOverlay(true);
+  const old = [...h.timers.values()][0]; h.ctx.hideOverlay(); old();
+  assert.equal(h.ctx.isVisible, false); assert.equal(h.ctx.resultsPanel.style.opacity, undefined);
+  h.ctx.prepareOpening(); h.ctx.isVisible = true; h.ctx.animateOverlay(true);
+  const count = h.ctx.motionAnimations.length; old();
+  assert.equal(h.ctx.motionAnimations.length, count);
 });

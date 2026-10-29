@@ -329,14 +329,6 @@ if (chrome.alarms && chrome.alarms.onAlarm) {
 
 scheduleHistoryBackfill();
 
-// Kept as a named boundary for the phase-3 background split. Future handlers
-// can consume this API without reaching into the visit-log implementation.
-const BackgroundFrecency = {
-  recordVisit,
-  computeFrecencyScore,
-  getFrecencyMapFor,
-  flushVisitLog
-};
 
 function injectOverlayScripts(tabId, callback) {
   chrome.tabs.sendMessage(tabId, { action: 'PING' }, (res) => {
@@ -344,17 +336,13 @@ function injectOverlayScripts(tabId, callback) {
       chrome.tabs.insertCSS(tabId, { file: 'overlay-styles.css', runAt: 'document_idle' }, () => {
         if (chrome.runtime.lastError) {}
         const scripts = [
-          'actions.js', 'shared/storage-keys.js', 'shared/storage-defaults.js',
+          'actions.js',
           'shared/search-engines.js',
           'command-bar-runtime.js',
-          'command-bar/command-bar-dom.js', 'command-bar/command-bar-state.js',
-          'command-bar/command-bar-focus.js', 'command-bar/command-bar-shortcuts.js',
-          'command-bar/command-bar-events.js', 'command-bar/command-bar-search-controller.js',
-          'command-bar/command-bar-results.js', 'command-bar/command-bar-actions.js',
-          'command-bar/command-bar-utils.js', 'command-bar/command-bar-cards.js',
-          'command-bar/fuzzy-search.js', 'command-bar/calculator-parser.js', 'command-bar/desmos-adapter.js',
+          'command-bar/command-bar-results.js',
+          'command-bar/fuzzy-search.js', 'command-bar/calculator-parser.js',
           'command-bar/command-bar-history.js', 'command-bar/query-intent.js',
-          'overlay-search.js', 'overlay-card.js', 'command-bar/command-bar-bootstrap.js'
+          'overlay-search.js', 'command-bar/math-renderer.js', 'overlay-card.js', 'command-bar/command-bar-view.bundle.js', 'command-bar/command-bar-bootstrap.js'
         ];
         const runNext = (index) => {
           if (index >= scripts.length) {
@@ -490,9 +478,6 @@ function recordCommandUsage(query, target) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (!request) return false;
-  if (request.action === 'COMMAND_BAR_VISIBILITY') {
-    return false;
-  }
   if (!request.type) return false;
 
   switch (request.type) {
@@ -554,71 +539,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     case 'FETCH_DEFINITION': {
-      const rawWord = request.word;
-      if (typeof rawWord !== 'string' || !rawWord.trim()) {
-        sendResponse({ definition: null });
-        return false;
-      }
-      const cleanWord = rawWord.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-      if (!cleanWord) {
-        sendResponse({ definition: null });
-        return false;
-      }
-
-      const apiUrl = `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(cleanWord)}`;
-      fetch(apiUrl)
-        .then((res) => {
-          if (!res.ok) throw new Error('FreeDictionaryAPI lookup failed');
-          return res.json();
-        })
-        .then((data) => {
-          if (data && Array.isArray(data.entries) && data.entries.length > 0) {
-            const wordText = data.word || cleanWord;
-            let phonetic = '';
-
-            for (const entry of data.entries) {
-              if (Array.isArray(entry.pronunciations) && entry.pronunciations.length > 0) {
-                const pObj = entry.pronunciations.find((p) => p && typeof p.text === 'string' && p.text.trim());
-                if (pObj) {
-                  phonetic = pObj.text;
-                  break;
-                }
-              }
-            }
-
-            const meanings = data.entries.map((entry) => {
-              const defs = Array.isArray(entry.senses)
-                ? entry.senses.slice(0, 3).map((s) => ({
-                    definition: s.definition || '',
-                    example: Array.isArray(s.examples) && s.examples.length > 0 ? s.examples[0] : ''
-                  })).filter((d) => d.definition)
-                : [];
-              const syns = Array.isArray(entry.synonyms) ? entry.synonyms.slice(0, 6) : [];
-              return {
-                partOfSpeech: entry.partOfSpeech || 'general',
-                definitions: defs,
-                synonyms: syns
-              };
-            }).filter((m) => m.definitions.length > 0);
-
-            if (meanings.length > 0) {
-              sendResponse({
-                definition: {
-                  status: 'success',
-                  word: wordText,
-                  phonetic: phonetic,
-                  audio: '',
-                  meanings: meanings
-                }
-              });
-              return;
-            }
-          }
-          throw new Error('No entries found');
-        })
-        .catch(() => {
-          sendResponse({ definition: { status: 'not_found', word: cleanWord } });
-        });
+      BackgroundDictionary.lookup(request.word, request.mode).then(definition => sendResponse({ definition }));
       return true;
     }
 
@@ -640,6 +561,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             favIconUrl: t.favIconUrl || '',
             windowId: t.windowId,
             active: Boolean(t.active),
+            lastAccessed: t.lastAccessed || 0,
             pinned: t.pinned,
             muted: t.mutedInfo ? t.mutedInfo.muted : false,
             frecency: frecency[normalizeUrlKey(t.url)] || 0
@@ -715,25 +637,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    case 'FOCUS_TAB': {
-      if (!request.tabId) return false;
-      chrome.tabs.get(request.tabId, (tab) => {
-        if (!chrome.runtime.lastError && tab) recordVisit(tab.url, 'focus');
-      });
-      chrome.tabs.update(request.tabId, { active: true }, () => {
-        if (chrome.runtime.lastError) return;
-        if (request.windowId) {
-          chrome.windows.getCurrent((currentWin) => {
-            if (chrome.runtime.lastError) return;
-            if (currentWin.id !== request.windowId) {
-              chrome.windows.update(request.windowId, { focused: true }, () => {
-                if (chrome.runtime.lastError) {}
-              });
-            }
+    case 'FOCUS_DESTINATION': {
+      const key = CommandBarResults.destinationKey(request.url);
+      if (!key) { sendResponse({ ok: false }); return false; }
+      chrome.tabs.query(request.allWindows ? {} : Number.isInteger(request.windowId) ? { windowId: request.windowId } : { currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError) { sendResponse({ ok: false }); return; }
+        const matching = (tabs || []).filter(tab => CommandBarResults.destinationKey(tab.url) === key).sort(CommandBarResults.preferredTab);
+        const focus = (remaining) => {
+          const tab = remaining.shift();
+          if (!tab) {
+            recordVisit(request.url, 'link');
+            chrome.tabs.create({ url: request.url }, () => { void chrome.runtime.lastError; sendResponse({ ok: true }); });
+            return;
+          }
+          chrome.tabs.update(tab.id, { active: true }, () => {
+            if (chrome.runtime.lastError) { focus(remaining); return; }
+            chrome.windows.update(tab.windowId, { focused: true }, () => { void chrome.runtime.lastError; sendResponse({ ok: true }); });
           });
-        }
+        };
+        focus(matching);
       });
-      return false;
+      return true;
     }
 
     case 'CREATE_TAB': {
@@ -755,21 +679,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
         );
       }
-      return false;
-    }
-
-    case 'SEARCH_CUSTOM_ENGINE': {
-      const query = typeof request.text === 'string' ? request.text.trim() : '';
-      if (!query || typeof CommandBarSearchEngines === 'undefined') return false;
-      chrome.storage.local.get({ customSearchEngines: [] }, (res) => {
-        const engines = CommandBarSearchEngines.sanitizeEngines(res.customSearchEngines);
-        const engine = engines.find((item) => item.id === request.engineId && item.enabled);
-        if (!engine) return;
-        let url;
-        try { url = CommandBarSearchEngines.buildUrl(engine.url, query); } catch (e) { return; }
-        chrome.tabs.create({ url }, () => { if (chrome.runtime.lastError) {} });
-        recordCommandUsage(query, `SEARCH_ENGINE:${engine.id}`);
-      });
       return false;
     }
 

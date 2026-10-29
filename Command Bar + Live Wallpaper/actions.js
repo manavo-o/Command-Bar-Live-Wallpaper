@@ -104,7 +104,6 @@
     },
     searchText: function (action) {
       return [action.label].concat(action.keywords || [], action.aliases || []).join(' ');
-    },
-    aliasesFor: function (action) { return (action.aliases || []).slice(); }
+    }
   };
 }(typeof self !== 'undefined' ? self : window));

@@ -1,7 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.CommandBarHistory = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./command-bar-results.js'));
+  else root.CommandBarHistory = factory(root.CommandBarResults);
+}(typeof self !== 'undefined' ? self : this, function (results) {
   function normalizeUrl(url) {
     if (!url) return '';
     try {
@@ -63,7 +63,7 @@
   function dedupeHistory(items, query, usage) {
     const chosen = new Map();
     rankHistory(items, query, usage).forEach((item) => {
-      const key = normalizeUrl(item.url);
+      const key = results.destinationKey(item.url);
       if (key && !chosen.has(key)) chosen.set(key, item);
     });
     return Array.from(chosen.values());

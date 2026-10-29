@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Command Bar & Live Wallpaper — Settings</title>
   <link rel="stylesheet" href="shared/design-tokens.css">
   <link rel="stylesheet" href="options.css">
@@ -45,6 +46,7 @@
     </nav>
 
     <main class="content">
+      <p id="settings-empty" class="settings-empty" role="status" hidden>No settings match your search. Try a different word.</p>
       <!-- Wallpaper Library -->
       <section class="pane" id="pane-library">
         <header class="pane-header">
@@ -54,7 +56,7 @@
 
           <section class="card hero-card">
           <div class="upload-area" id="upload-area">
-            <label for="wallpaper-input" class="btn primary-btn">Upload New Wallpaper</label>
+            <button id="upload-wallpaper-button" type="button" class="btn primary-btn">Upload New Wallpaper</button>
             <input type="file" id="wallpaper-input" accept="video/mp4,video/webm,image/gif,image/*" style="display:none;">
             <span class="hint">Supports MP4, WebM, GIF, PNG, JPG</span>
           </div>
@@ -207,9 +209,24 @@
       <section class="pane" id="pane-widgets" hidden>
         <header class="pane-header">
           <h1>Widgets</h1>
-          <p class="pane-sub">Small pieces of information layered on top of your wallpaper.</p>
+          <p class="pane-sub">A personal dashboard, with just what you need at a glance.</p>
         </header>
 
+        <section class="card dashboard-preview-card" aria-label="Dashboard preview">
+          <div class="dashboard-preview" aria-hidden="true">
+            <div class="preview-clock" data-preview="clock">9:41</div>
+            <div class="preview-date" data-preview="date">Thursday, October 15</div>
+            <div class="preview-tiles">
+              <div data-preview="weather"><span class="preview-symbol">☀</span><strong>72°</strong><small>Weather</small></div>
+              <div data-preview="focus"><strong>25:00</strong><small>Time to focus</small></div>
+            </div>
+            <p data-preview="quote">“Make room for what matters.”</p>
+            <span class="preview-empty">Enable a widget below to build your dashboard.</span>
+          </div>
+          <div class="preview-caption"><div><h2>Your dashboard</h2><p class="hint">Move it by its handle on a new tab. Use arrow keys for precise placement.</p></div><button id="reset-dashboard-position" class="btn secondary-btn" type="button">Reset Position</button></div>
+          <p id="dashboard-settings-status" class="status-msg" role="status"></p>
+        </section>
+        <div class="widget-settings-grid">
         <section class="card">
           <h2>Clock & Date</h2>
           <div class="setting-row">
@@ -309,6 +326,7 @@
             <span class="hint">min</span>
           </div>
         </section>
+        </div>
       </section>
 
       <!-- Command Bar -->
@@ -338,11 +356,6 @@
               <label class="routing-option"><input type="radio" name="search-routing-mode" value="balanced" checked><span><strong>Balanced</strong><small>AI for questions and tasks. Google for web searches.</small></span></label>
               <label class="routing-option"><input type="radio" name="search-routing-mode" value="prefer-ai"><span><strong>Prefer AI</strong><small>All ordinary searches use your browser default.</small></span></label>
             </fieldset>
-            <select id="select-search-routing-mode" hidden aria-hidden="true" tabindex="-1"><option value="balanced">Balanced</option><option value="prefer-ai">Prefer AI</option></select>
-          </div>
-          <div class="setting-row">
-            <div><strong>Default explicit AI provider</strong><div class="hint">Provider used for q% and ai% prefixes</div></div>
-            <select id="select-ai-provider" class="select-input"><option value="perplexity">Perplexity</option></select>
           </div>
           <div class="setting-row">
             <div><strong>Density</strong><div class="hint">Choose compact rows or more breathing room</div></div>
@@ -373,13 +386,13 @@
         <section class="card commandbar-guide">
           <h2>Using the Command Bar</h2>
           <dl>
-            <div><dt>Enter</dt><dd>Search, or execute a selected result. Calculator and dictionary results can be copied; missing definitions open Apple Dictionary.</dd></div>
+            <div><dt>Enter</dt><dd>Search, or execute a selected result. Math answers and symbolic previews, definitions, and synonyms can be copied; missing words open Apple Dictionary.</dd></div>
             <div><dt>↑ / ↓ · Tab / Shift+Tab</dt><dd>Navigate results. Ctrl+J / Ctrl+K also move down and up.</dd></div>
             <div><dt>→ / Tab · Backspace</dt><dd>Accept inline autocomplete with Right Arrow or Tab. Backspace cancels the selected completion.</dd></div>
             <div><dt>Escape</dt><dd>Close the command bar. Its configured shortcut also toggles it.</dd></div>
             <div><dt>Shift+Enter</dt><dd>Search with Google. Configured custom search shortcuts appear under Custom Search Engines below.</dd></div>
             <div><dt>@history · @bookmarks</dt><dd>Search a specific source. Use /allwindows to include tabs from every window.</dd></div>
-            <div><dt>/ · math · define word</dt><dd>Find actions, enter an expression or solve command, or look up a definition.</dd></div>
+            <div><dt>/ · math · define word</dt><dd>Find actions, enter an expression or solve command, or look up a definition. Math cards automatically format powers, fractions, and roots.</dd></div>
           </dl>
         </section>
 
@@ -390,13 +403,10 @@
           <div class="engine-editor" id="search-engine-editor" hidden>
             <input id="engine-name" class="text-input" placeholder="Name (e.g. YouTube)" aria-label="Search engine name">
             <input id="engine-url" class="text-input engine-url-input" placeholder="https://example.com/search?q={query} (q% also works)" aria-label="Search engine URL">
-            <input id="engine-trigger" class="text-input" placeholder="Trigger (optional, e.g. q%)" aria-label="Provider trigger">
-            <select id="engine-type" class="select-input" aria-label="Provider type"><option value="url">URL provider</option><option value="api">API adapter (coming soon)</option></select>
             <select id="engine-shortcut" class="select-input" aria-label="Search engine shortcut">
               <option value="">No shortcut</option><option value="ctrl+enter">Ctrl+Enter</option><option value="alt+enter">Alt+Enter</option><option value="meta+enter">Meta+Enter</option>
             </select>
             <label class="engine-enabled"><input id="engine-enabled" type="checkbox" checked> Enabled</label>
-            <label class="engine-enabled"><input id="engine-ai" type="checkbox"> AI provider</label>
             <div class="engine-editor-actions"><button id="engine-save" class="btn primary-btn">Save Engine</button><button id="engine-cancel" class="btn secondary-btn">Cancel</button></div>
             <p id="engine-status" class="status-msg" role="status"></p>
           </div>
@@ -424,7 +434,7 @@
               <div class="hint">Export settings and disabled action profiles to JSON</div>
             </div>
             <button id="btn-export" class="btn secondary-btn">Export Profile</button>
-            <label for="input-import" class="btn secondary-btn">Import Profile</label>
+            <button id="import-profile-button" type="button" class="btn secondary-btn">Import Profile</button>
             <input id="input-import" type="file" accept="application/json,.json" hidden>
           </div>
           <p id="backup-status" class="status-msg" role="status"></p>
@@ -444,34 +454,25 @@
             <span id="about-version" class="hint"></span>
           </div>
           <p class="hint">
-            This extension requests broad permissions (all-sites access, tabs, history, bookmarks, downloads)
-            because the command bar needs to read and act on tabs across every site, and the new-tab page needs
-            unlimited local storage for large video wallpapers. Nothing leaves your machine — the weather widget
-            is the only feature that makes an external network request (to Open-Meteo, for forecast data only).
+            Wallpapers, preferences, and cached icons are stored locally. Tabs, history, and bookmarks power command-bar results.
+            Type “calm def” for a definition or “calm syn” for synonyms. Word lookups check spelling automatically. Enabled search suggestions send your query to Google; definitions use FreeDictionaryAPI; spelling checks and synonyms use Datamuse. Weather and city lookup use Open-Meteo.
+            Icon discovery uses browser caches, icon links from open tabs, and direct favicon files without credentials. No third-party favicon service is used.
+            All-sites access enables the overlay and icon discovery; unlimited storage supports large video wallpapers.
           </p>
         </section>
       </section>
     </main>
   </div>
+  <p id="settings-save-status" class="save-status" role="status"></p>
 
   <script src="actions.js"></script>
   <script src="shared/storage-keys.js"></script>
   <script src="shared/storage-defaults.js"></script>
   <script src="shared/storage.js"></script>
+  <script src="shared/search-engines.js"></script>
   <script src="shared/storage-migrations.js"></script>
   <script src="shared/ui-feedback.js"></script>
-  <script src="shared/url-utils.js"></script>
-  <script src="shared/search-engines.js"></script>
-  <script src="shared/rotation.js"></script>
   <script src="db.js"></script>
-  <script src="options/options-navigation.js"></script>
-  <script src="options/options-storage.js"></script>
-  <script src="options/options-wallpaper-library.js"></script>
-  <script src="options/options-effects-settings.js"></script>
-  <script src="options/options-rotation-settings.js"></script>
-  <script src="options/options-widget-settings.js"></script>
-  <script src="options/options-command-bar-settings.js"></script>
-  <script src="options/options-backup.js"></script>
   <script src="options/options-bootstrap.js"></script>
 </body>
 </html>

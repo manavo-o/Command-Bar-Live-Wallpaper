@@ -4,30 +4,44 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
 }(typeof self !== 'undefined' ? self : this, function () {
   const QUESTION_STARTERS = /^(what|how|why|when|where|who|which|can|should|is|are|explain|compare|summarize)\b/i;
-  const AI_PREFIX = /^(q%|ai%)\s*/i;
 
   function scope(query) {
     const q = String(query || '').trim();
     const match = q.match(/^(@history|@bookmarks|\/allwindows)(?=\s|$)/i);
     return match ? match[1].toLowerCase() : null;
   }
-  function explicitDictionary(query) {
+  function wordLookup(query) {
     const q = String(query || '').trim();
-    if (/^(define|def|dict)\s+\S(?:.*\S)?$/i.test(q)) return q.replace(/^(define|def|dict)\s+/i, '').trim();
-    if (/^\S[\w-]{1,40}\s+\?$/i.test(q)) return q.replace(/\s*\?$/, '').trim();
+    // Explicit aliases only: fuzzy matching short commands would capture ordinary searches.
+    const commands = { def: 'definition', define: 'definition', dict: 'definition',
+      definition: 'definition', dfe: 'definition', df: 'definition', defi: 'definition',
+      defintion: 'definition', definiton: 'definition', deifne: 'definition',
+      syn: 'synonyms', synonym: 'synonyms', synonyms: 'synonyms',
+      sny: 'synonyms', synn: 'synonyms', synomym: 'synonyms', synoynm: 'synonyms' };
+    const parts = q.split(/\s+/);
+    if (parts.length > 1) {
+      const firstKey = parts[0].toLowerCase();
+      const first = Object.prototype.hasOwnProperty.call(commands, firstKey) && commands[firstKey];
+      const lastKey = parts[parts.length - 1].toLowerCase();
+      const last = Object.prototype.hasOwnProperty.call(commands, lastKey) && commands[lastKey];
+      if (last) return { mode: last, word: parts.slice(0, -1).join(' ') };
+      if (first) return { mode: first, word: parts.slice(1).join(' ') };
+    }
+    if (/^\S[\w-]{1,40}\s+\?$/i.test(q)) return { mode: 'definition', word: q.replace(/\s*\?$/, '') };
     return null;
   }
-  function stripQuestionPrefix(query, providers) {
-    let value = String(query || '').trim().replace(AI_PREFIX, '');
-    (providers || []).some((provider) => {
-      const trigger = String(provider.trigger || '').trim();
-      if (!trigger || !value.toLowerCase().startsWith(trigger.toLowerCase())) return false;
-      value = value.slice(trigger.length).trim();
-      return true;
-    });
-    return value;
-  }
   function looksLikeMath(query, evaluate) { return typeof evaluate === 'function' && Boolean(evaluate(String(query || '').trim())); }
+  function navigationUrl(query) {
+    const text = String(query || '').trim();
+    if (!text || /\s/.test(text)) return null;
+    const explicit = /^https?:\/\//i.test(text);
+    if (!explicit && !/^(?:localhost|(?:[\p{L}\p{N}-]+\.)+[\p{L}]{2,}|(?:\d{1,3}\.){3}\d{1,3})(?::\d+)?(?:[/?#]\S*)?$/iu.test(text)) return null;
+    try {
+      const url = new URL(explicit ? text : 'https://' + text);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
+      return url.href;
+    } catch (_) { return null; }
+  }
   function looksLikeQuestion(query) {
     const q = String(query || '').trim();
     if (!q || /^(?:https?:\/\/|www\.)\S+$|^(?:[\w-]+\.)+[a-z]{2,}(?:[/:?#]\S*)?$/i.test(q)) return false;
@@ -51,23 +65,12 @@
     const scopeName = scope(q);
     if (scopeName) return { type: 'SCOPE', scope: scopeName, query: q };
     if (q.startsWith('/')) return { type: 'ACTION', query: q };
-    const word = explicitDictionary(q);
-    if (word) return { type: 'DICTIONARY', word, query: q };
+    const lookup = wordLookup(q);
+    if (lookup) return { type: 'DICTIONARY', word: lookup.word, mode: lookup.mode, query: q };
     if (looksLikeMath(q, opts.evaluate)) return { type: 'MATH', query: q };
-    const forced = q.match(AI_PREFIX);
-    const configured = (opts.providers || []).find((provider) => provider.trigger && q.toLowerCase().startsWith(String(provider.trigger).toLowerCase()));
-    if (forced || configured) return { type: 'AI', forced: true, providerId: configured && configured.id, query: stripQuestionPrefix(q, configured ? [configured] : []), trigger: forced ? forced[1].toLowerCase() : configured.trigger };
-    if (searchDestination(q, { mode: opts.mode }) === 'default') return { type: 'AI', forced: false, query: q };
+    if (navigationUrl(q)) return { type: 'URL', query: q, url: navigationUrl(q) };
+    if (searchDestination(q, { mode: opts.mode }) === 'default') return { type: 'AI', query: q };
     return { type: 'SEARCH', query: q };
   }
-  function rank(query, item) {
-    const q = String(query || '').trim().toLowerCase();
-    const text = `${item.title || ''} ${item.url || ''}`.toLowerCase();
-    let score = 0;
-    if (text.startsWith(q)) score += 120;
-    if ((item.title || '').toLowerCase().startsWith(q)) score += 80;
-    if (q && new RegExp(`(^|[\\s./_-])${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[\\s./_-])`, 'i').test(text)) score += 35;
-    return score;
-  }
-  return { scope, explicitDictionary, looksLikeQuestion, normalizeRoutingMode, searchDestination, classify, rank };
+  return { navigationUrl, scope, wordLookup, looksLikeQuestion, normalizeRoutingMode, searchDestination, classify };
 }));

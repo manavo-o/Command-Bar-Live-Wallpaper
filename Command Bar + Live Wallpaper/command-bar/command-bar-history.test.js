@@ -9,7 +9,7 @@ const items = [
 ];
 
 assert.strictEqual(history.normalizeUrl(items[0].url), 'https://example.com/a');
-assert.strictEqual(history.dedupeHistory(items, 'example').length, 2);
+assert.strictEqual(history.dedupeHistory(items, 'example').length, 3);
 assert.deepStrictEqual(history.groupHistory(items, 'example').filter((x) => x.type === 'HISTORY_GROUP').map((x) => x.group), ['example.com', 'other.test']);
 assert.strictEqual(history.relativeTime(now - 60 * 60 * 1000, now), '1h ago');
 assert(history.usageBoost('example', { type: 'HISTORY', data: items[0] }, {

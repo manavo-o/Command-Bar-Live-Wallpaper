@@ -1,6 +1,5 @@
 (function (root) {
   const storage = root.CommandBarStorage = root.CommandBarStorage || {};
-  const keys = storage.KEYS || {};
   const defaults = storage.DEFAULTS || {};
 
   function get(request, callback) {
@@ -26,7 +25,6 @@
     }
   }
 
-  function update(values, callback) { set(values, callback); }
 
   function debounceWrite(delay) {
     let timer = null;
@@ -44,8 +42,6 @@
 
   storage.get = get;
   storage.set = set;
-  storage.update = update;
   storage.debounceWrite = debounceWrite;
-  storage.SCHEMA_VERSION = 4;
-  storage.KEYS.schemaVersion = 'storageSchemaVersion';
+  storage.SCHEMA_VERSION = 6;
 }(typeof self !== 'undefined' ? self : window));

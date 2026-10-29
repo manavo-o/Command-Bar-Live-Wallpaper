@@ -4,6 +4,7 @@
     wallpapers: [],
     activeWallpaperId: null,
     widgetPos: null,
+    dashboardPos: null,
     focusTimerState: null,
     searchAllWindowsByDefault: false,
     commandBarUsage: {},
@@ -31,18 +32,13 @@
     showWidgetFocusTimer: false,
     focusWorkMinutes: 25,
     focusBreakMinutes: 5
-    ,storageSchemaVersion: 4
+    ,storageSchemaVersion: 6
     ,actionFavorites: []
-    ,customQuickLinks: []
     ,commandBarResultLimit: 6
     ,commandBarSuggestionsEnabled: true
     ,commandBarAutocompleteEnabled: true
     ,commandBarDensity: 'comfortable'
-    ,preferredSearchEngine: 'https://www.google.com/search?q='
     ,customSearchEngines: []
     ,searchRoutingMode: 'balanced'
-    ,aiRoutingEnabled: true
-    ,questionDetectionEnabled: true
-    ,aiDefaultProvider: 'perplexity'
   });
 }(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : globalThis)));

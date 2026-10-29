@@ -22,39 +22,102 @@
     svg.appendChild(path);
     icon.appendChild(svg);
   });
+  const saveStatus = document.getElementById('settings-save-status');
+  function announceSave(ok) {
+    saveStatus.textContent = ok ? 'Saved' : 'Could not save settings. Try again.';
+    saveStatus.classList.toggle('is-error', !ok);
+  }
+  function saveSettings(values, callback) {
+    chrome.storage.local.set(values, () => {
+      announceSave(!chrome.runtime.lastError);
+      if (callback) callback();
+    });
+  }
+  document.addEventListener('change', event => {
+    const control = event.target;
+    if (control.type !== 'number') return;
+    const valid = control.checkValidity();
+    control.setAttribute('aria-invalid', String(!valid));
+    if (!valid) {
+      event.stopImmediatePropagation(); control.reportValidity();
+      saveStatus.textContent = 'Enter a number in the allowed range.';
+      saveStatus.classList.add('is-error');
+    }
+  }, true);
   const settingsSearch = document.getElementById('settings-search');
 
+  let selectedSection = 'library';
   function selectSection(section) {
-    navItems.forEach((b) => {
-      const active = b.dataset.section === section;
-      b.classList.toggle('active', active);
-      const pane = document.getElementById(`pane-${b.dataset.section}`);
-      const query = settingsSearch ? settingsSearch.value.trim().toLowerCase() : '';
-      const matches = !query || !pane || (`${b.textContent} ${pane.textContent}`).toLowerCase().includes(query);
-      b.hidden = !matches;
-      b.setAttribute('aria-current', active ? 'page' : 'false');
-      if (pane) pane.dataset.searchMatch = matches ? 'true' : 'false';
+    selectedSection = section;
+    const query = settingsSearch ? settingsSearch.value.trim().toLowerCase() : '';
+    const matching = [];
+    panes.forEach(pane => {
+      const titleMatches = pane.querySelector('.pane-header').textContent.toLowerCase().includes(query);
+      let hasMatch = !query || titleMatches;
+      pane.querySelectorAll('.card').forEach(card => {
+        const match = !query || titleMatches || card.textContent.toLowerCase().includes(query);
+        card.dataset.filterHidden = String(!match);
+        hasMatch ||= match;
+      });
+      pane.dataset.searchMatch = String(hasMatch);
+      if (hasMatch) matching.push(pane.id.replace('pane-', ''));
     });
-    panes.forEach((p) => { p.hidden = p.id !== `pane-${section}`; });
+    if (!matching.includes(selectedSection)) selectedSection = matching[0] || '';
+    navItems.forEach(button => {
+      const active = button.dataset.section === selectedSection;
+      button.classList.toggle('active', active);
+      button.hidden = !matching.includes(button.dataset.section);
+      if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+    });
+    panes.forEach(pane => { pane.hidden = pane.id !== `pane-${selectedSection}`; });
+    document.getElementById('settings-empty').hidden = matching.length > 0;
   }
+  navItems.forEach(button => button.addEventListener('click', () => selectSection(button.dataset.section)));
+  if (settingsSearch) settingsSearch.addEventListener('input', () => selectSection(selectedSection));
 
-  navItems.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      tactile('press');
-      selectSection(btn.dataset.section);
+  document.getElementById('input-day-hour').setAttribute('aria-label', 'Day starts at hour');
+  document.getElementById('input-night-hour').setAttribute('aria-label', 'Night starts at hour');
+  const linkedSection = window.location.hash.slice(1);
+  if (Array.from(navItems).some(item => item.dataset.section === linkedSection)) selectSection(linkedSection);
+
+  // Keep the native controls, but give every control an explicit accessible label.
+  document.querySelectorAll('.setting-row').forEach((row, index) => {
+    const title = row.querySelector('strong');
+    if (!title) return;
+    title.id ||= 'setting-label-' + index;
+    row.querySelectorAll('input, select').forEach(control => {
+      if (!control.hasAttribute('aria-label') && !control.hasAttribute('aria-labelledby')) control.setAttribute('aria-labelledby', title.id);
     });
   });
-  if (settingsSearch) {
-      settingsSearch.addEventListener('input', () => {
-      const query = settingsSearch.value.trim().toLowerCase();
-      panes.forEach((pane) => {
-        const matches = !query || pane.textContent.toLowerCase().includes(query);
-        pane.dataset.searchMatch = matches ? 'true' : 'false';
-      });
-      const active = Array.from(navItems).find((item) => item.classList.contains('active'));
-      selectSection(active && !active.hidden ? active.dataset.section : (Array.from(navItems).find((item) => !item.hidden) || {}).dataset?.section || 'library');
-      });
-    }
+  const rangeUnits = { 'input-transition': ' ms', 'input-speed': '×', 'input-brightness': '%', 'input-contrast': '%' };
+  document.querySelectorAll('input[type="range"]').forEach(control => {
+    const wrap = document.createElement('div'); wrap.className = 'range-control';
+    control.before(wrap); wrap.appendChild(control);
+    const output = document.createElement('output'); output.htmlFor = control.id; wrap.appendChild(output);
+    const update = () => { output.value = control.value + (rangeUnits[control.id] || ''); control.setAttribute('aria-valuetext', output.value); };
+    control.addEventListener('input', update);
+    control.syncOutput = update;
+    update();
+  });
+  function syncDashboardPreview() {
+    const toggles = { clock: 'toggle-widget-clock', date: 'toggle-widget-date', weather: 'toggle-widget-weather', focus: 'toggle-widget-focus', quote: 'toggle-widget-quote' };
+    let count = 0;
+    Object.entries(toggles).forEach(([name, id]) => {
+      const enabled = document.getElementById(id).checked;
+      document.querySelector(`[data-preview="${name}"]`).hidden = !enabled;
+      if (enabled) count++;
+    });
+    const preview = document.querySelector('.dashboard-preview');
+    preview.classList.toggle('is-empty', count === 0);
+    preview.querySelector('.preview-tiles').hidden = !document.getElementById('toggle-widget-weather').checked && !document.getElementById('toggle-widget-focus').checked;
+    document.querySelector('[data-preview="focus"] strong').textContent = (document.getElementById('input-focus-work').value || '25') + ':00';
+  }
+  document.getElementById('pane-widgets').addEventListener('change', syncDashboardPreview);
+  document.getElementById('reset-dashboard-position').addEventListener('click', () => {
+    saveSettings({ dashboardPos: null }, () => {
+      document.getElementById('dashboard-settings-status').textContent = chrome.runtime.lastError ? 'Position could not be reset.' : 'Dashboard position reset.';
+    });
+  });
 
   document.addEventListener('click', (event) => {
     const interactive = event.target.closest('.btn, .segment, .action-item, .focus-btn');
@@ -65,6 +128,7 @@
   // Wallpaper Library (unchanged behavior from v1)
   // ---------------------------------------------------------------------
   const wallpaperInput = document.getElementById('wallpaper-input');
+  document.getElementById('upload-wallpaper-button').addEventListener('click', () => wallpaperInput.click());
   const wallpaperList = document.getElementById('wallpaper-list');
   const uploadArea = document.getElementById('upload-area');
   const wallpaperPreview = document.getElementById('wallpaper-preview');
@@ -201,7 +265,7 @@
   }
 
   function setActiveWallpaper(id) {
-    chrome.storage.local.set({ activeWallpaperId: id }, () => {
+    saveSettings({ activeWallpaperId: id }, () => {
       renderWallpapers();
     });
   }
@@ -216,7 +280,7 @@
           if (activeId === id) {
             activeId = wallpapers.length > 0 ? wallpapers[0].id : null;
           }
-          chrome.storage.local.set({ wallpapers, activeWallpaperId: activeId }, () => {
+          saveSettings({ wallpapers, activeWallpaperId: activeId }, () => {
             renderWallpapers();
           });
         });
@@ -244,7 +308,7 @@
           };
           wallpapers.push(newMeta);
           const activeId = res.activeWallpaperId || id;
-          chrome.storage.local.set({ wallpapers, activeWallpaperId: activeId }, () => {
+          saveSettings({ wallpapers, activeWallpaperId: activeId }, () => {
             wallpaperInput.value = '';
             tactile('success');
             renderWallpapers();
@@ -275,8 +339,8 @@
   const inputTransition = document.getElementById('input-transition');
   const toggleKenBurns = document.getElementById('toggle-ken-burns');
   const toggleParallax = document.getElementById('toggle-parallax');
-  const debouncedSettingWrite = window.CommandBarStorage && window.CommandBarStorage.debounceWrite
-    ? window.CommandBarStorage.debounceWrite(120) : (values) => chrome.storage.local.set(values);
+  const queueSettings = window.CommandBarStorage && window.CommandBarStorage.debounceWrite ? window.CommandBarStorage.debounceWrite(120) : null;
+  const debouncedSettingWrite = values => queueSettings ? queueSettings(values, announceSave) : saveSettings(values);
   function updatePreviewFilter() {
     const media = wallpaperPreview && wallpaperPreview.firstElementChild;
     if (!media) return;
@@ -298,10 +362,10 @@
     debouncedSettingWrite({ wpTransitionMs: parseInt(inputTransition.value, 10) });
   });
   toggleKenBurns.addEventListener('change', () => {
-    chrome.storage.local.set({ kenBurnsEnabled: toggleKenBurns.checked });
+    saveSettings({ kenBurnsEnabled: toggleKenBurns.checked });
   });
   toggleParallax.addEventListener('change', () => {
-    chrome.storage.local.set({ parallaxEnabled: toggleParallax.checked });
+    saveSettings({ parallaxEnabled: toggleParallax.checked });
   });
 
   // ---------------------------------------------------------------------
@@ -334,7 +398,7 @@
     const mode = seg.dataset.mode;
     setSegmentedActive(modeSegmented, 'mode', mode);
     showModeCards(mode);
-    chrome.storage.local.set({ wallpaperMode: mode });
+    saveSettings({ wallpaperMode: mode });
   });
 
   rotationOrderSegmented.addEventListener('click', (e) => {
@@ -342,29 +406,29 @@
     if (!seg) return;
     const order = seg.dataset.order;
     setSegmentedActive(rotationOrderSegmented, 'order', order);
-    chrome.storage.local.set({ rotationOrder: order });
+    saveSettings({ rotationOrder: order });
   });
 
   inputRotationInterval.addEventListener('input', () => {
-    chrome.storage.local.set({ rotationIntervalMinutes: parseInt(inputRotationInterval.value, 10) || 30 });
+    saveSettings({ rotationIntervalMinutes: parseInt(inputRotationInterval.value, 10) || 30 });
   });
 
   selectDayWallpaper.addEventListener('change', () => {
-    chrome.storage.local.set({ scheduleDayWallpaperId: selectDayWallpaper.value });
+    saveSettings({ scheduleDayWallpaperId: selectDayWallpaper.value });
   });
   selectNightWallpaper.addEventListener('change', () => {
-    chrome.storage.local.set({ scheduleNightWallpaperId: selectNightWallpaper.value });
+    saveSettings({ scheduleNightWallpaperId: selectNightWallpaper.value });
   });
 
   toggleUseSuntimes.addEventListener('change', () => {
-    chrome.storage.local.set({ scheduleUseSunTimes: toggleUseSuntimes.checked });
+    saveSettings({ scheduleUseSunTimes: toggleUseSuntimes.checked });
     manualHoursRow.style.opacity = toggleUseSuntimes.checked ? '0.4' : '1';
   });
   inputDayHour.addEventListener('input', () => {
-    chrome.storage.local.set({ scheduleDayStartHour: parseInt(inputDayHour.value, 10) });
+    saveSettings({ scheduleDayStartHour: parseInt(inputDayHour.value, 10) });
   });
   inputNightHour.addEventListener('input', () => {
-    chrome.storage.local.set({ scheduleNightStartHour: parseInt(inputNightHour.value, 10) });
+    saveSettings({ scheduleNightStartHour: parseInt(inputNightHour.value, 10) });
   });
 
   // ---------------------------------------------------------------------
@@ -375,13 +439,13 @@
   const toggle24Hour = document.getElementById('toggle-24hour');
 
   toggleWidgetClock.addEventListener('change', () => {
-    chrome.storage.local.set({ showWidgetClock: toggleWidgetClock.checked });
+    saveSettings({ showWidgetClock: toggleWidgetClock.checked });
   });
   toggleWidgetDate.addEventListener('change', () => {
-    chrome.storage.local.set({ showWidgetDate: toggleWidgetDate.checked });
+    saveSettings({ showWidgetDate: toggleWidgetDate.checked });
   });
   toggle24Hour.addEventListener('change', () => {
-    chrome.storage.local.set({ use24Hour: toggle24Hour.checked });
+    saveSettings({ use24Hour: toggle24Hour.checked });
   });
 
   // ---------------------------------------------------------------------
@@ -396,7 +460,7 @@
   const weatherStatus = document.getElementById('weather-status');
 
   toggleWidgetWeather.addEventListener('change', () => {
-    chrome.storage.local.set({ showWidgetWeather: toggleWidgetWeather.checked });
+    saveSettings({ showWidgetWeather: toggleWidgetWeather.checked });
   });
 
   weatherLocationSegmented.addEventListener('click', (e) => {
@@ -405,7 +469,7 @@
     const loc = seg.dataset.loc;
     setSegmentedActive(weatherLocationSegmented, 'loc', loc);
     weatherCityRow.style.display = loc === 'manual' ? 'flex' : 'none';
-    chrome.storage.local.set({ weatherLocationMode: loc });
+    saveSettings({ weatherLocationMode: loc });
   });
 
   weatherUnitsSegmented.addEventListener('click', (e) => {
@@ -413,7 +477,7 @@
     if (!seg) return;
     const units = seg.dataset.units;
     setSegmentedActive(weatherUnitsSegmented, 'units', units);
-    chrome.storage.local.set({ weatherUnits: units });
+    saveSettings({ weatherUnits: units });
   });
 
   // Geocode the manual city name once, via Open-Meteo's free geocoding
@@ -432,7 +496,7 @@
           return;
         }
         const label = [result.name, result.admin1, result.country].filter(Boolean).join(', ');
-        chrome.storage.local.set({
+        saveSettings({
           weatherManualLat: result.latitude,
           weatherManualLon: result.longitude,
           weatherManualLabel: label
@@ -454,16 +518,16 @@
   const inputFocusBreak = document.getElementById('input-focus-break');
 
   toggleWidgetQuote.addEventListener('change', () => {
-    chrome.storage.local.set({ showWidgetQuote: toggleWidgetQuote.checked });
+    saveSettings({ showWidgetQuote: toggleWidgetQuote.checked });
   });
   toggleWidgetFocus.addEventListener('change', () => {
-    chrome.storage.local.set({ showWidgetFocusTimer: toggleWidgetFocus.checked });
+    saveSettings({ showWidgetFocusTimer: toggleWidgetFocus.checked });
   });
   inputFocusWork.addEventListener('input', () => {
-    chrome.storage.local.set({ focusWorkMinutes: parseInt(inputFocusWork.value, 10) || 25 });
+    saveSettings({ focusWorkMinutes: parseInt(inputFocusWork.value, 10) || 25 });
   });
   inputFocusBreak.addEventListener('input', () => {
-    chrome.storage.local.set({ focusBreakMinutes: parseInt(inputFocusBreak.value, 10) || 5 });
+    saveSettings({ focusBreakMinutes: parseInt(inputFocusBreak.value, 10) || 5 });
   });
 
   // ---------------------------------------------------------------------
@@ -475,18 +539,13 @@
   const inputResultLimit = document.getElementById('input-result-limit');
   const toggleSuggestions = document.getElementById('toggle-suggestions');
   const toggleAutocomplete = document.getElementById('toggle-autocomplete');
-  const selectSearchRoutingMode = document.getElementById('select-search-routing-mode');
-  const selectAiProvider = document.getElementById('select-ai-provider');
   const selectDensity = document.getElementById('select-density');
   const enginesList = document.getElementById('search-engines-list');
   const engineEditor = document.getElementById('search-engine-editor');
   const engineName = document.getElementById('engine-name');
   const engineUrl = document.getElementById('engine-url');
-  const engineTrigger = document.getElementById('engine-trigger');
-  const engineType = document.getElementById('engine-type');
   const engineShortcut = document.getElementById('engine-shortcut');
   const engineEnabled = document.getElementById('engine-enabled');
-  const engineAi = document.getElementById('engine-ai');
   const engineSave = document.getElementById('engine-save');
   const engineCancel = document.getElementById('engine-cancel');
   const engineAdd = document.getElementById('engine-add');
@@ -494,7 +553,7 @@
   let editingEngineId = null;
 
   function engineStore(next, callback) {
-    chrome.storage.local.set({ customSearchEngines: next }, callback);
+    saveSettings({ customSearchEngines: next }, callback);
   }
 
   function closeEngineEditor() {
@@ -507,11 +566,8 @@
     editingEngineId = engine ? engine.id : null;
     engineName.value = engine ? engine.name : '';
     engineUrl.value = engine ? engine.url : '';
-    engineTrigger.value = engine ? engine.trigger : '';
-    engineType.value = engine ? engine.type : 'url';
     engineShortcut.value = engine && engine.shortcut !== 'shift+enter' ? engine.shortcut : '';
     engineEnabled.checked = !engine || engine.enabled !== false;
-    engineAi.checked = Boolean(engine && engine.isAi);
     engineStatus.textContent = '';
     engineEditor.hidden = false;
     engineName.focus();
@@ -521,10 +577,6 @@
     if (!enginesList) return;
     chrome.storage.local.get({ customSearchEngines: [] }, (res) => {
       const engines = window.CommandBarSearchEngines.sanitizeEngines(res.customSearchEngines);
-      const builtIns = window.CommandBarSearchEngines.builtInAiEngines ? window.CommandBarSearchEngines.builtInAiEngines() : [];
-      selectAiProvider.innerHTML = '';
-      builtIns.concat(engines.filter((item) => item.isAi)).forEach((item) => { const option = document.createElement('option'); option.value = item.id; option.textContent = item.name; selectAiProvider.appendChild(option); });
-      selectAiProvider.value = res.aiDefaultProvider || 'perplexity';
       enginesList.innerHTML = '';
       if (!engines.length) {
         const empty = document.createElement('p'); empty.className = 'empty-msg'; empty.textContent = 'No custom search engines yet.'; enginesList.appendChild(empty); return;
@@ -533,7 +585,7 @@
         const row = document.createElement('div'); row.className = `search-engine-item${engine.enabled ? '' : ' is-disabled'}`;
         const info = document.createElement('div'); info.className = 'engine-info';
         const name = document.createElement('div'); name.className = 'engine-name'; name.textContent = engine.name + (engine.enabled ? '' : ' (disabled)');
-        const meta = document.createElement('div'); meta.className = 'engine-meta'; meta.textContent = `${engine.isAi ? 'AI provider · ' : ''}${engine.shortcut ? window.CommandBarSearchEngines.shortcutLabel(engine.shortcut) : 'No shortcut'} · ${engine.url}`;
+        const meta = document.createElement('div'); meta.className = 'engine-meta'; meta.textContent = `${engine.shortcut ? window.CommandBarSearchEngines.shortcutLabel(engine.shortcut) : 'No shortcut'} · ${engine.url}`;
         info.append(name, meta);
         const actions = document.createElement('div'); actions.className = 'engine-actions';
         const toggle = document.createElement('button'); toggle.className = 'btn btn-sm secondary-btn'; toggle.textContent = engine.enabled ? 'Disable' : 'Enable';
@@ -555,7 +607,6 @@
     chrome.storage.local.get({ customSearchEngines: [] }, (res) => {
       const engines = helper.sanitizeEngines(res.customSearchEngines);
       if (shortcut && engines.some((item) => item.shortcut === shortcut && item.id !== editingEngineId)) { engineStatus.textContent = 'That shortcut is already assigned.'; return; }
-      const next = { id: editingEngineId || `engine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: engineName.value.trim(), url: normalizedUrl, shortcut, enabled: engineEnabled.checked, type: engineType.value, isAi: engineAi.checked, icon: engineAi.checked ? '✦' : '', trigger: engineTrigger.value.trim() };
       if (!next.name) { engineStatus.textContent = 'Name is required.'; return; }
       const updated = editingEngineId ? engines.map((item) => item.id === editingEngineId ? next : item) : engines.concat(next);
       engineStore(updated, () => { closeEngineEditor(); renderSearchEngines(); });
@@ -566,28 +617,25 @@
     chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
   });
   toggleAllWindows.addEventListener('change', () => {
-    chrome.storage.local.set({ searchAllWindowsByDefault: toggleAllWindows.checked });
+    saveSettings({ searchAllWindowsByDefault: toggleAllWindows.checked });
   });
-  inputResultLimit.addEventListener('change', () => chrome.storage.local.set({ commandBarResultLimit: Math.max(3, Math.min(20, parseInt(inputResultLimit.value, 10) || 6)) }));
-  toggleSuggestions.addEventListener('change', () => chrome.storage.local.set({ commandBarSuggestionsEnabled: toggleSuggestions.checked }));
-  toggleAutocomplete.addEventListener('change', () => chrome.storage.local.set({ commandBarAutocompleteEnabled: toggleAutocomplete.checked }));
-  selectSearchRoutingMode.addEventListener('change', () => chrome.storage.local.set({ searchRoutingMode: selectSearchRoutingMode.value }));
+  inputResultLimit.addEventListener('change', () => saveSettings({ commandBarResultLimit: Math.max(3, Math.min(20, parseInt(inputResultLimit.value, 10) || 6)) }));
+  toggleSuggestions.addEventListener('change', () => saveSettings({ commandBarSuggestionsEnabled: toggleSuggestions.checked }));
+  toggleAutocomplete.addEventListener('change', () => saveSettings({ commandBarAutocompleteEnabled: toggleAutocomplete.checked }));
   const routingRadios = Array.from(document.querySelectorAll('input[name="search-routing-mode"]'));
   function syncRoutingMode(value) {
     const mode = value === 'prefer-ai' ? 'prefer-ai' : 'balanced';
-    selectSearchRoutingMode.value = mode;
     routingRadios.forEach((radio) => { radio.checked = radio.value === mode; });
   }
   routingRadios.forEach((radio) => radio.addEventListener('change', () => {
     if (!radio.checked) return;
     syncRoutingMode(radio.value);
-    chrome.storage.local.set({ searchRoutingMode: radio.value });
+    saveSettings({ searchRoutingMode: radio.value });
   }));
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.searchRoutingMode) syncRoutingMode(changes.searchRoutingMode.newValue);
   });
-  selectAiProvider.addEventListener('change', () => chrome.storage.local.set({ aiDefaultProvider: selectAiProvider.value }));
-  selectDensity.addEventListener('change', () => chrome.storage.local.set({ commandBarDensity: selectDensity.value }));
+  selectDensity.addEventListener('change', () => saveSettings({ commandBarDensity: selectDensity.value }));
 
   function renderActions() {
     const allActions = window.ActionRegistry ? window.ActionRegistry.all() : (window.ACTIONS || []);
@@ -612,7 +660,7 @@
             } else if (!currentDisabled.includes(action.id)) {
               currentDisabled.push(action.id);
             }
-            chrome.storage.local.set({ disabledActions: currentDisabled });
+            saveSettings({ disabledActions: currentDisabled });
           });
         });
 
@@ -628,7 +676,7 @@
           chrome.storage.local.get(['actionFavorites'], (innerRes) => {
             let current = Array.isArray(innerRes.actionFavorites) ? innerRes.actionFavorites : [];
             current = favorite.checked ? Array.from(new Set(current.concat(action.id))) : current.filter((id) => id !== action.id);
-            chrome.storage.local.set({ actionFavorites: current });
+            saveSettings({ actionFavorites: current });
           });
         });
         row.appendChild(favorite);
@@ -643,11 +691,14 @@
   // ---------------------------------------------------------------------
   const btnExport = document.getElementById('btn-export');
   const inputImport = document.getElementById('input-import');
+  document.getElementById('import-profile-button').addEventListener('click', () => inputImport.click());
   const backupStatus = document.getElementById('backup-status');
   btnExport.addEventListener('click', () => {
     chrome.storage.local.get(null, (allData) => {
-      const exportData = { ...allData };
-      ['tabFrecency', 'visitLog', 'historyIndex', 'weatherCache', 'actionUsage', 'commandBarUsage'].forEach((key) => delete exportData[key]);
+      const allowed = Object.values(window.CommandBarStorage.KEYS);
+      const exportData = Object.fromEntries(Object.entries(allData).filter(([key]) => allowed.includes(key)));
+      exportData.customSearchEngines = window.CommandBarSearchEngines.sanitizeEngines(allData.customSearchEngines);
+      ['tabFrecency', 'visitLog', 'historyIndex', 'weatherCache', 'actionUsage', 'commandBarUsage', 'siteIconCache'].forEach((key) => delete exportData[key]);
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute('href', dataStr);
@@ -671,8 +722,12 @@
         if (Object.prototype.hasOwnProperty.call(safe, 'customSearchEngines')) {
           safe.customSearchEngines = window.CommandBarSearchEngines.sanitizeEngines(safe.customSearchEngines);
         }
+        if (Number(parsed.storageSchemaVersion || 0) < 5 && !safe.dashboardPos && safe.widgetPos &&
+            Number.isFinite(safe.widgetPos.left) && Number.isFinite(safe.widgetPos.top)) {
+          safe.dashboardPos = safe.widgetPos;
+        }
         delete safe.storageSchemaVersion;
-        chrome.storage.local.set(safe, () => {
+        saveSettings(safe, () => {
           backupStatus.textContent = chrome.runtime.lastError ? 'Import failed.' : `Imported ${Object.keys(safe).length} settings. Reload to apply all changes.`;
           renderWallpapers();
         });
@@ -703,7 +758,6 @@
       toggleSuggestions.checked = Boolean(res.commandBarSuggestionsEnabled);
       toggleAutocomplete.checked = Boolean(res.commandBarAutocompleteEnabled);
       syncRoutingMode(res.searchRoutingMode);
-      selectAiProvider.value = res.aiDefaultProvider || 'perplexity';
       selectDensity.value = res.commandBarDensity || 'comfortable';
       renderSearchEngines();
       toggleWidgetClock.checked = Boolean(res.showWidgetClock);
@@ -738,6 +792,8 @@
       inputFocusWork.value = res.focusWorkMinutes;
       inputFocusBreak.value = res.focusBreakMinutes;
       updatePreviewFilter();
+      document.querySelectorAll('input[type="range"]').forEach(control => control.syncOutput());
+      syncDashboardPreview();
     }
   );
 

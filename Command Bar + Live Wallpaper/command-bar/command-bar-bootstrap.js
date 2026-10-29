@@ -1,5 +1,5 @@
 (function (hostDocument) {
-  if (window.__cmd_bar_overlay_injected) return;
+  if (window.__cmd_bar_overlay_injected || !window.CommandBarView) return;
   window.__cmd_bar_overlay_injected = true;
 
   function isContextValid() {
@@ -58,13 +58,26 @@
       .overlay-backdrop.visible,.overlay-backdrop.exiting{visibility:visible;}
       .overlay-backdrop.visible{pointer-events:auto;}
       .modal-box{width:min(740px,100%);max-height:80vh;display:flex;flex-direction:column;gap:12px;}
-      .input-wrapper,.results-panel{background:#202126;border:1px solid #ffffff24;will-change:transform,opacity;}
+      .input-wrapper,.results-panel{background:linear-gradient(160deg,#151516,#0d0d0e);border:1px solid #ffffff24;box-shadow:inset 0 1px 0 #ffffff12,0 14px 40px #0005;will-change:transform,opacity;}
+      .overlay-backdrop .input-wrapper,.overlay-backdrop .results-panel{visibility:hidden;}
+      .overlay-backdrop.visible .input-wrapper,.overlay-backdrop.visible .results-panel,.overlay-backdrop.exiting .input-wrapper,.overlay-backdrop.exiting .results-panel{visibility:visible;}
       .input-wrapper{padding:22px 28px;border-radius:999px;}
       .input-field{box-sizing:border-box;width:100%;background:transparent;border:0;outline:0;color:inherit;font:22px system-ui;}
-      .results-panel{border-radius:28px;overflow:auto;}
+      .input-field::placeholder{font-size:22px;color:#ffffff70;}
+      .input-wrapper{position:relative;}
+      .caret-mirror{position:absolute;visibility:hidden;white-space:pre;pointer-events:none;}
+      .caret-aura{position:absolute;width:2px;background:#f8fbff;box-shadow:0 0 5px 2px #e2f4ff,0 0 13px 4px #b4dbffb3;pointer-events:none;}
+      .caret-aura[hidden],.results-panel[hidden]{display:none;}
+      .ai-submit{flex-shrink:0;width:36px;height:36px;margin-left:16px;border:1px solid #ffffff50;border-radius:50%;background:#ffffff15;color:inherit;}
+      .ai-submit svg{width:23px;height:23px;}
+      .results-panel{box-sizing:border-box;border-radius:28px;overflow:hidden;}
+      .results-container{overflow:auto;max-height:58vh;}
+      .results-track{position:relative;isolation:isolate;}
+      .selection-highlight{position:absolute;pointer-events:none;background:#ffffff14;border-radius:16px;}
+      .results-list{position:relative;}
       .results-list{list-style:none;padding:12px;margin:0;}
-      .result-item{display:flex;gap:12px;align-items:center;padding:12px 16px;border-radius:18px;}
-      .result-item.selected{background:#ffffff1a;}
+      .result-item{display:flex;gap:12px;align-items:center;padding:12px 16px;border-radius:16px;}
+      .result-item.selected{color:#fff;}
       .result-left{display:flex;align-items:center;gap:14px;min-width:0;}
       .result-icon{width:28px;height:28px;}
       .result-text{min-width:0;} .result-title,.result-sub{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -78,50 +91,107 @@
   styleLoadTimer = setTimeout(() => { if (!stylesReady) finishStyleLoading(true); }, 1500);
   shadow.appendChild(linkTag);
 
-  const backdrop = document.createElement('div');
-  backdrop.className = 'overlay-backdrop';
-  backdrop.setAttribute('role', 'presentation');
-  backdrop.setAttribute('aria-hidden', 'true');
-  backdrop.inert = true;
-  const modalBox = document.createElement('div');
-  modalBox.className = 'modal-box';
-  modalBox.setAttribute('role', 'dialog');
-  modalBox.setAttribute('aria-modal', 'true');
-  modalBox.setAttribute('aria-label', 'Command Bar');
-  const inputWrapper = document.createElement('div');
-  inputWrapper.className = 'input-wrapper';
+  const view = window.CommandBarView.mount(shadow, {
+    key: item => getItemKey(item),
+    positions: (query, text) => window.OverlaySearch?.fuzzyMatchPositions(query, text),
+    icon: item => resolvedIcons.get(getItemKey(item)) || (/^(https?:|data:image\/)/i.test(item.icon || '') ? item.icon : '') || fallbackIcon(item.type),
+    fallback: type => fallbackIcon(type),
+    onLayout: () => { updateSelectionHighlight(false); decorations.track(250); },
+    collapse: () => { selectedIndex = 0; explicitSelection = false; renderResults(); },
+    submitAI: () => { if (!isComposing && currentResults.some(item => item.type === 'AI')) executeSearch(input.value); },
+    select: index => { explicitSelection = true; selectedIndex = index; executeSelected(); },
+    renderCard: (node, item, options) => window.OverlayCard?.renderInlineCard(node, item, options),
+    openDictionary: word => { safeSendMessage({ type: 'OPEN_APPLE_DICT', word }); input.value = word; hideOverlay(); }
+  });
+  const { backdrop, modalBox, inputWrapper, input, resultsContainer, resultsList, selectionHighlight, resultsPanel } = view.refs;
+  const decorations = window.CommandBarView.createDecorations({ hostDocument, hostShadow, frame, refs: view.refs, window });
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'input-field';
-  input.setAttribute('aria-controls', '__cmd_bar_results__');
-  input.setAttribute('aria-autocomplete', 'list');
-  input.placeholder = "Search or enter a command…";
-  input.setAttribute('aria-label', 'Search tabs, history, bookmarks, actions, math, or definitions');
-  inputWrapper.appendChild(input);
+  const caretAura = window.CommandBarView.createCaretAura({ refs: view.refs, frame, hostWindow: window, hostDocument });
 
-  const contentBody = document.createElement('div');
-  contentBody.className = 'content-body';
-  const resultsContainer = document.createElement('div');
-  resultsContainer.className = 'results-container';
-  const resultsList = document.createElement('ul');
-  resultsList.className = 'results-list';
-  resultsList.id = '__cmd_bar_results__';
-  resultsList.setAttribute('role', 'listbox');
-  resultsContainer.appendChild(resultsList);
-  contentBody.appendChild(resultsContainer);
+  const resultAnimations = new Map();
+  let hasRenderedResults = false;
+  let highlightReady = false;
 
-  const resultsPanel = document.createElement('div');
-  resultsPanel.className = 'results-panel';
-  resultsPanel.appendChild(contentBody);
-  modalBox.append(inputWrapper, resultsPanel);
-  backdrop.appendChild(modalBox);
-  shadow.appendChild(backdrop);
+  // Result motion owns height/position only; entrance motion owns surface transforms.
+  function stopResultAnimation(node) {
+    const active = resultAnimations.get(node);
+    if (!active) return;
+    resultAnimations.delete(node);
+    clearTimeout(active.timer);
+    active.animation.cancel();
+  }
+  function playResultAnimation(node, frames, duration) {
+    stopResultAnimation(node);
+    if (!isVisible || !stylesReady || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !node.animate) return;
+    try {
+      const animation = node.animate(frames, {
+        timeline: hostDocument.timeline, duration,
+        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both'
+      });
+      const active = { animation, timer: null };
+      const settle = () => {
+        if (resultAnimations.get(node) !== active) return;
+        stopResultAnimation(node);
+      };
+      resultAnimations.set(node, active);
+      active.timer = setTimeout(settle, duration + 100);
+      animation.finished.then(settle, settle);
+    } catch (error) { /* Final styles are already applied; render immediately. */ }
+  }
+  function cancelResultMotion(reset = false) {
+    for (const node of resultAnimations.keys()) stopResultAnimation(node);
+    resultsPanel.style.height = '';
+    if (reset) {
+      hasRenderedResults = false;
+      highlightReady = false;
+      selectionHighlight.hidden = true;
+    }
+  }
+  function updateSelectionHighlight(animate = true) {
+    const selected = currentResults[selectedIndex] && rowNodeMap.get(getItemKey(currentResults[selectedIndex]));
+    if (!isVisible || !selected || selected.getAttribute('aria-selected') !== 'true') {
+      stopResultAnimation(selectionHighlight);
+      selectionHighlight.hidden = true;
+      highlightReady = false;
+      return;
+    }
+    const before = frame.contentWindow.getComputedStyle(selectionHighlight);
+    const from = { top: before.top, left: before.left, width: before.width, height: before.height };
+    // Layout offsets stay correct while an entrance transform scales the panel.
+    const to = { top: `${selected.offsetTop + resultsList.offsetTop}px`,
+      left: `${selected.offsetLeft + resultsList.offsetLeft}px`,
+      width: `${selected.offsetWidth}px`, height: `${selected.offsetHeight}px` };
+    stopResultAnimation(selectionHighlight);
+    Object.assign(selectionHighlight.style, to);
+    selectionHighlight.hidden = false;
+    if (highlightReady && animate && Object.keys(to).some(key => from[key] !== to[key])) {
+      playResultAnimation(selectionHighlight, [from, to], 150);
+    }
+    highlightReady = true;
+  }
+  function finishResultRender(previousHeight, inserted) {
+    stopResultAnimation(resultsPanel);
+    resultsPanel.style.height = '';
+    const nextHeight = resultsPanel.offsetHeight;
+    if (hasRenderedResults && previousHeight !== nextHeight) {
+      playResultAnimation(resultsPanel, [{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }], 200);
+    }
+    for (const row of inserted) playResultAnimation(row, [{ opacity: 0 }, { opacity: 1 }], 100);
+    updateSelectionHighlight();
+    hasRenderedResults = true;
+  }
+  resultsContainer.addEventListener('scroll', () => { updateSelectionHighlight(false); resolveVisibleIcons(); }, { passive: true });
+  frame.contentWindow.addEventListener('resize', () => {
+    if (!isVisible) return;
+    cancelResultMotion();
+    updateSelectionHighlight(false);
+  });
 
   let isVisible = false;
   let exitCleanupTimer = null;
   let motionAnimations = [];
   let motionGeneration = 0;
+  let openingMotionTimer = null;
   let openGeneration = 0;
   let currentResults = [];
   let selectedIndex = 0;
@@ -159,8 +229,7 @@
   let autocompleteEnabled = true;
   let customSearchEngines = [];
   let searchRoutingMode = 'balanced';
-  let aiDefaultProvider = 'perplexity';
-  let rowNodeMap = new Map();
+  const rowNodeMap = view.rows;
 
   const MAX_MATCH_RESULTS = 6;
   const SEARCH_ACTION_SCORE = 42;
@@ -183,6 +252,13 @@
     const text = String(query || '').trim();
     if (!text) return;
     const engine = e && e.shiftKey ? null : customSearchForEvent(e);
+    const url = !engine && !(e && e.shiftKey) ? window.CommandBarIntent.navigationUrl(text) : null;
+    if (url) {
+      recordCommandUsage(text, { type: 'HISTORY', data: { url } });
+      safeSendMessage({ type: 'CREATE_TAB', url, visitKind: 'typed' });
+      hideOverlay();
+      return;
+    }
     const destination = window.CommandBarIntent.searchDestination(text, { mode: searchRoutingMode, shiftKey: Boolean(e && e.shiftKey) });
     recordCommandUsage(text, engine ? { type: 'SEARCH_ENGINE', data: { engineId: engine.id, query: text } } : { type: 'SEARCH', data: { query: text } });
     if (engine && typeof CommandBarSearchEngines !== 'undefined') {
@@ -199,24 +275,8 @@
     hideOverlay();
   }
 
-  function aiProviders() {
-    const helper = typeof CommandBarSearchEngines !== 'undefined' ? CommandBarSearchEngines : null;
-    const builtIns = helper && helper.builtInAiEngines ? helper.builtInAiEngines() : [];
-    const configured = customSearchEngines.filter((engine) => engine.isAi || engine.type === 'api');
-    const byId = new Map();
-    builtIns.concat(configured).forEach((engine) => { if (engine && engine.enabled !== false) byId.set(engine.id, engine); });
-    return Array.from(byId.values());
-  }
-
-  function renderAiResults(query, forced, providerId) {
-    const providers = forced ? aiProviders() : [{ id: 'browser-default', name: 'Browser default (AI)', type: 'browser-default', icon: '✦' }];
-    const defaultProvider = providers.find((provider) => provider.id === providerId) || providers.find((provider) => provider.id === aiDefaultProvider) || providers[0];
-    currentResults = providers.map((provider, index) => ({
-      type: 'AI', data: { provider, query }, title: `${provider.icon || '✦'} Ask ${provider.name}`,
-      sub: provider.type === 'browser-default' ? 'Uses your browser default search engine' : provider.type === 'api' ? 'API provider · configure credentials to enable' : `Search with ${provider.name}`,
-      badges: ['AI'], score: provider === defaultProvider ? 100 : 90 - index, forced
-    })).sort((a, b) => b.score - a.score);
-    if (!currentResults.length) currentResults = [{ type: 'SEARCH', data: { query }, title: `Search Web for "${query}"`, sub: 'No AI providers configured', badges: ['SEARCH'], score: 42 }];
+  function renderAiResults(query) {
+    currentResults = [{ type: 'AI', data: { query }, title: 'Ask AI', score: 100 }];
     selectedIndex = 0;
     clearAutocomplete();
     renderResults();
@@ -260,7 +320,6 @@
         searchRoutingMode = window.CommandBarIntent.normalizeRoutingMode(changes.searchRoutingMode.newValue);
               if (isVisible) updateSearch();
       }
-      if (changes.aiDefaultProvider) aiDefaultProvider = changes.aiDefaultProvider.newValue || 'perplexity';
     });
   }
 
@@ -335,7 +394,7 @@
     completionTarget = null;
     completionState = 'cancelled';
     autocompleteSuffixSelected = false;
-    cancelledCompletionQuery = String(query || typedQuery).trim();
+    cancelledCompletionQuery = String(query == null ? typedQuery : query).trim();
   }
 
   function completionBlocked(query) {
@@ -345,26 +404,14 @@
   function applyAutocomplete(queryText, confidentItem, source) {
     if (!queryText || !confidentItem) { clearAutocomplete(); return; }
     const qLower = queryText.toLowerCase();
-    const urlStr = (confidentItem.data && confidentItem.data.url) || '';
     let candidateString = null;
     if (source === 'web') {
       candidateString = confidentItem.data && confidentItem.data.query;
     } else {
-      try {
-        const parsed = new URL(urlStr);
-        const host = parsed.hostname.replace(/^www\./, '');
-        const displayUrl = `${host}${parsed.pathname}${parsed.search}`;
-        if (host.toLowerCase() === qLower) candidateString = host;
-        else if (displayUrl.toLowerCase().startsWith(qLower)) candidateString = displayUrl;
-        else if (host.toLowerCase().startsWith(qLower)) candidateString = host;
-      } catch (e) {}
-    }
-    if (source !== 'web' && !candidateString && urlStr.toLowerCase().startsWith(qLower)) {
-      candidateString = urlStr;
-    }
-    if (source !== 'web' && !candidateString) {
-      const titleStr = confidentItem.title || '';
-      if (titleStr.toLowerCase().startsWith(qLower)) candidateString = titleStr;
+      candidateString = websiteCompletion(queryText, confidentItem);
+      if (!candidateString && (confidentItem.title || '').toLowerCase().startsWith(qLower)) {
+        candidateString = confidentItem.title;
+      }
     }
     if (!candidateString) { clearAutocomplete(); return; }
     const suffix = candidateString.slice(queryText.length);
@@ -411,49 +458,15 @@
     safeSendMessage({ type: 'RECORD_COMMAND_USAGE', query, target });
   }
 
-  function highlightMatches(text, query) {
-    if (!text) return '';
-    const trimmedQuery = query && query.trim();
-    if (!trimmedQuery) {
-      const span = document.createElement('span');
-      span.textContent = text;
-      return span.innerHTML;
-    }
-    const positions = window.OverlaySearch ? window.OverlaySearch.fuzzyMatchPositions(trimmedQuery, text) : null;
-    if (!positions || positions.length === 0) {
-      const span = document.createElement('span');
-      span.textContent = text;
-      return span.innerHTML;
-    }
-    const posSet = new Set(positions);
-    const wrap = document.createElement('span');
-    let i = 0;
-    while (i < text.length) {
-      if (posSet.has(i)) {
-        let j = i;
-        let runText = '';
-        while (j < text.length && posSet.has(j)) { runText += text[j]; j++; }
-        const mark = document.createElement('mark');
-        mark.className = 'match-highlight';
-        mark.textContent = runText;
-        wrap.appendChild(mark);
-        i = j;
-      } else {
-        wrap.appendChild(document.createTextNode(text[i]));
-        i++;
-      }
-    }
-    return wrap.innerHTML;
-  }
-
   function clearResultNodes() {
-    rowNodeMap.forEach((li) => li.remove());
-    rowNodeMap.clear();
-    resultsList.innerHTML = '';
+    cancelResultMotion(true);
+    view.clear();
   }
 
   // Read before cancelling so reversals begin at the currently painted state.
   function cancelMotion() {
+    clearTimeout(openingMotionTimer);
+    openingMotionTimer = null;
     const nodes = [backdrop, inputWrapper, resultsPanel];
     const states = nodes.map((node) => {
       const style = frame.contentWindow.getComputedStyle(node);
@@ -463,11 +476,27 @@
     motionAnimations = [];
     return states;
   }
+  function finishOpeningMotion(generation) {
+    if (!isVisible || generation !== motionGeneration) return;
+    clearTimeout(openingMotionTimer);
+    openingMotionTimer = null;
+    // Invalidate rejected completion handlers before cancelling stalled effects.
+    ++motionGeneration;
+    motionAnimations.forEach((animation) => animation.cancel());
+    motionAnimations = [];
+    backdrop.style.opacity = '';
+    inputWrapper.style.opacity = resultsPanel.style.opacity = '1';
+    inputWrapper.style.transform = resultsPanel.style.transform = 'none';
+    decorations.sync();
+  }
   function fadeProgress(t) {
     const progress = Math.max(0, Math.min(1, t));
     return progress * progress * (3 - 2 * progress);
   }
   function animateOverlay(opening) {
+    decorations.setActive(true);
+    caretAura.setActive(opening);
+    decorations.track(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 450);
     const interrupted = motionAnimations.length > 0;
     const states = cancelMotion();
     const generation = ++motionGeneration;
@@ -478,62 +507,77 @@
     }
     const animations = [];
     try {
-    nodes.forEach((node, index) => {
-      const start = interrupted ? states[index] : {
-        opacity: opening ? '0' : '1',
-        transform: opening ? 'translateY(-10px) scale(0.96)' : 'none'
-      };
-      let keyframes;
-      if (index === 0) {
-        keyframes = [{ opacity: start.opacity }, { opacity: opening ? 1 : 0 }];
-      } else if (opening) {
-        // One damped overshoot, sampled at 60 points; normalize the endpoint.
-        const response = (t) => 1 - Math.exp(-5 * t) * (Math.cos(9 * t) + 5 / 9 * Math.sin(9 * t));
-        const end = response(1);
-        const matrix = new frame.contentWindow.DOMMatrixReadOnly(start.transform === 'none' ? undefined : start.transform);
-        keyframes = Array.from({ length: 61 }, (_, i) => {
-          const t = i / 60;
-          const progress = response(t) / end;
-          // Limit overshoot to 0.008 at the default starting scale.
-          const scale = Math.min(1.008, matrix.a + (1 - matrix.a) * progress);
-          return { offset: t, transform: `translateY(${matrix.m42 * (1 - progress)}px) scale(${scale})`,
-            opacity: Number(start.opacity) + (1 - Number(start.opacity)) * fadeProgress(t * 460 / 280) };
-        });
-        keyframes[keyframes.length - 1] = { offset: 1, transform: 'translateY(0) scale(1)', opacity: 1 };
-      } else {
-        keyframes = [start, { transform: 'translateY(-6px) scale(0.975)', opacity: 0 }];
-      }
-      animations.push(node.animate(keyframes, {
-        duration: opening ? (index === 0 ? 280 : 460) : 240,
-        delay: opening && index === 2 && !interrupted ? 25 : 0,
-        easing: opening ? (index === 0 ? 'ease-in-out' : 'linear') : 'cubic-bezier(0.4, 0, 0.8, 1)', fill: 'both'
-      }));
-    });
+      nodes.forEach((node, index) => {
+        const start = interrupted ? states[index] : {
+          opacity: opening ? '0' : '1',
+          transform: opening ? 'translateY(-6px) scale(0.98)' : 'none'
+        };
+        let keyframes;
+        if (index === 0) {
+          keyframes = [{ opacity: start.opacity }, { opacity: opening ? 1 : 0 }];
+        } else if (opening) {
+          // One damped overshoot, sampled at 60 points; normalize the endpoint.
+          const response = (t) => 1 - Math.exp(-5 * t) * (Math.cos(9 * t) + 5 / 9 * Math.sin(9 * t));
+          const end = response(1);
+          const matrix = new frame.contentWindow.DOMMatrixReadOnly(start.transform === 'none' ? undefined : start.transform);
+          keyframes = Array.from({ length: 61 }, (_, i) => {
+            const t = i / 60;
+            const progress = response(t) / end;
+            // Limit overshoot to 0.003 at the default starting scale.
+            const scale = Math.min(1.003, matrix.a + (1 - matrix.a) * progress);
+            return { offset: t, transform: `translateY(${matrix.m42 * (1 - progress)}px) scale(${scale})`,
+              opacity: Number(start.opacity) + (1 - Number(start.opacity)) * fadeProgress(t * 320 / 180) };
+          });
+          keyframes[keyframes.length - 1] = { offset: 1, transform: 'translateY(0) scale(1)', opacity: 1 };
+        } else {
+          keyframes = [start, { transform: 'translateY(-3px) scale(0.99)', opacity: 0 }];
+        }
+        animations.push(node.animate(keyframes, {
+          // The about:blank iframe can be throttled independently during host
+          // hover/video activity. Use the same clock as the shortcut handler.
+          timeline: hostDocument.timeline,
+          duration: opening ? (index === 0 ? 180 : 320) : 180,
+          delay: opening && index === 2 && !interrupted ? 16 : 0,
+          easing: opening ? (index === 0 ? 'ease-in-out' : 'linear') : 'cubic-bezier(0.4, 0, 0.8, 1)', fill: 'both'
+        }));
+      });
     } catch (error) {
       // A renderer/API failure must never leave an invisible fill animation.
       animations.forEach((animation) => {
         animation.finished.catch(() => {});
         animation.cancel();
       });
-      if (!opening) finishExit();
+      if (opening) finishOpeningMotion(generation); else finishExit();
       return;
     }
     motionAnimations = animations;
+    decorations.sync();
+    if (opening) openingMotionTimer = setTimeout(() => finishOpeningMotion(generation), 450);
     Promise.all(animations.map((animation) => animation.finished)).then(() => {
       if (generation !== motionGeneration) return;
-      animations.forEach((animation) => animation.cancel());
-      motionAnimations = [];
-      if (!opening) finishExit();
-    }).catch(() => {}); // Cancellation is expected when the user reverses direction.
+      if (opening) finishOpeningMotion(generation);
+      else {
+        animations.forEach((animation) => animation.cancel());
+        motionAnimations = [];
+        finishExit();
+      }
+    }).catch(() => {
+      // Recover unexpected cancellation; old/reversed generations are ignored.
+      if (opening) finishOpeningMotion(generation);
+    });
   }
   function finishExit() {
     if (isVisible) return;
+    clearTimeout(openingMotionTimer);
+    openingMotionTimer = null;
     clearTimeout(exitCleanupTimer);
     exitCleanupTimer = null;
     ++motionGeneration;
     motionAnimations.forEach((animation) => animation.cancel());
     motionAnimations = [];
     backdrop.classList.remove('exiting');
+    decorations.setActive(false);
+    caretAura.setActive(false);
     clearResultNodes();
     input.value = '';
   }
@@ -550,13 +594,13 @@
   }
 
   function hideOverlay() {
+    cancelResultMotion();
     ++openGeneration;
     isVisible = false;
     currentQueryToken = ++queryGeneration;
     clearTimeout(searchDebounceTimer);
     clearTimeout(suggestDebounceTimer);
     resetSessionCaches();
-    safeSendMessage({ action: 'COMMAND_BAR_VISIBILITY', active: false });
     backdrop.classList.add('exiting');
     backdrop.classList.remove('visible');
     frame.style.pointerEvents = 'none';
@@ -578,17 +622,27 @@
     animateOverlay(false);
   }
 
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', (event) => {
+    decorations.setActive(false);
+    caretAura.setActive(false);
+    if (!event.persisted) { caretAura.dispose(); decorations.dispose(); view.dispose(); }
+    cancelResultMotion(true);
+    clearTimeout(openingMotionTimer);
+    openingMotionTimer = null;
     ++motionGeneration;
     motionAnimations.forEach((animation) => animation.cancel());
     motionAnimations = [];
     clearTimeout(exitCleanupTimer);
   });
 
+  window.addEventListener('pageshow', () => { if (isVisible) { decorations.setActive(true); caretAura.setActive(true); } });
+
   function resetSessionCaches() {
     tabsCachePromises = {};
     historyCachePromises = new Map();
     bookmarksCachePromises = new Map();
+    resolvedIcons.clear();
+    requestedIcons.clear();
   }
   function getTabsCached(allWindows) {
     const key = allWindows ? 'all' : 'current';
@@ -628,7 +682,6 @@
     resetSessionCaches();
     prepareOpening();
     isVisible = true;
-    safeSendMessage({ action: 'COMMAND_BAR_VISIBILITY', active: true });
     backdrop.classList.add('visible');
     backdrop.classList.remove('exiting');
     animateOverlay(true);
@@ -643,7 +696,7 @@
     updateSearch();
     // Show with the current settings immediately; storage must not gate focus.
     try {
-      chrome.storage.local.get(['commandBarDensity', 'searchAllWindowsByDefault', 'disabledActions', 'actionUsage', 'commandBarUsage', 'actionFavorites', 'commandBarResultLimit', 'commandBarSuggestionsEnabled', 'commandBarAutocompleteEnabled', 'customSearchEngines', 'searchRoutingMode', 'aiDefaultProvider'], (res) => {
+      chrome.storage.local.get(['commandBarDensity', 'searchAllWindowsByDefault', 'disabledActions', 'actionUsage', 'commandBarUsage', 'actionFavorites', 'commandBarResultLimit', 'commandBarSuggestionsEnabled', 'commandBarAutocompleteEnabled', 'customSearchEngines', 'searchRoutingMode'], (res) => {
         if (!isVisible || generation !== openGeneration) return;
         if (chrome.runtime && chrome.runtime.lastError) return;
         searchAllWindowsByDefault = Boolean(res && res.searchAllWindowsByDefault);
@@ -656,7 +709,6 @@
         autocompleteEnabled = res && res.commandBarAutocompleteEnabled !== false;
         customSearchEngines = typeof CommandBarSearchEngines !== 'undefined' ? CommandBarSearchEngines.sanitizeEngines(res && res.customSearchEngines) : [];
         searchRoutingMode = window.CommandBarIntent.normalizeRoutingMode(res && res.searchRoutingMode);
-        aiDefaultProvider = (res && res.aiDefaultProvider) || 'perplexity';
         surfaceRoot.dataset.density = (res && res.commandBarDensity) === 'compact' ? 'compact' : 'comfortable';
         resetSessionCaches();
         updateSearch();
@@ -669,21 +721,22 @@
     if (isVisible) hideOverlay(); else showOverlay();
   }
 
-  function handleDictionaryLookup(targetWord, token) {
-    safeSendMessage({ type: 'FETCH_DEFINITION', word: targetWord }, (res) => {
+  function handleDictionaryLookup(targetWord, token, mode = 'definition') {
+    safeSendMessage({ type: 'FETCH_DEFINITION', word: targetWord, mode }, (res) => {
       if (token !== currentQueryToken) return;
       const defData = res && res.definition;
+      if (defData) defData.mode = mode;
       if (defData && defData.status === 'success') {
         const firstMeaning = Array.isArray(defData.meanings) && defData.meanings[0];
         const firstDef = firstMeaning && Array.isArray(firstMeaning.definitions) && firstMeaning.definitions[0];
         activeDefItem = {
           type: 'DEF', data: defData,
           title: `${defData.word}${defData.phonetic ? ' • ' + defData.phonetic : ''}`,
-          sub: firstDef ? `[${firstMeaning.partOfSpeech}] ${firstDef.definition}` : 'Dictionary Definition'
+          sub: mode === 'synonyms' ? (defData.synonyms || []).join(', ') : firstDef ? `[${firstMeaning.partOfSpeech}] ${firstDef.definition}` : 'Dictionary Definition'
         };
       } else {
         activeDefItem = {
-          type: 'DEF', data: { status: 'not_found', word: targetWord },
+          type: 'DEF', data: defData || { status: 'unavailable', word: targetWord, mode },
           title: `Define "${targetWord}"`,
           sub: `Open "${targetWord}" in macOS Apple Dictionary`
         };
@@ -726,27 +779,9 @@
     const calcObj = window.OverlaySearch ? window.OverlaySearch.evaluateCalc(trimmed) : null;
     if (calcObj !== null) {
       clearAutocomplete();
-      currentResults = [{ type: 'CALC', data: calcObj, title: `= ${calcObj.query}`, sub: `Expression: ${calcObj.expr}` }];
+      currentResults = [{ type: 'CALC', data: calcObj, title: calcObj.query, sub: `Expression: ${calcObj.expr}` }];
       selectedIndex = 0;
       renderResults();
-      return;
-    }
-
-    if (window.OverlaySearch && window.OverlaySearch.looksLikeMath && window.OverlaySearch.looksLikeMath(trimmed)) {
-      clearAutocomplete();
-      const loading = { kind: 'loading', expression: trimmed, latex: window.OverlaySearch.toLatex(trimmed), query: 'Evaluating…', expr: trimmed };
-      currentResults = [{ type: 'CALC', data: loading, title: '= Evaluating…', sub: `Expression: ${trimmed}` }];
-      selectedIndex = 0;
-      renderResults();
-      if (window.CommandBarDesmos && typeof window.CommandBarDesmos.evaluate === 'function') {
-        window.CommandBarDesmos.evaluate(trimmed).then((desmosResult) => {
-          if (queryToken !== currentQueryToken || trimmed !== input.value.trim()) return;
-          const data = desmosResult || { kind: 'error', expression: trimmed, latex: loading.latex, query: 'Unsupported math expression', error: 'Desmos is unavailable and the local engine could not solve this expression' };
-          currentResults = [{ type: 'CALC', data, title: `= ${data.query}`, sub: `Expression: ${trimmed}` }];
-          selectedIndex = 0;
-          renderResults();
-        });
-      }
       return;
     }
 
@@ -772,10 +807,10 @@
       return;
     }
 
-    const intent = window.CommandBarIntent ? window.CommandBarIntent.classify(trimmed, { evaluate: window.OverlaySearch && window.OverlaySearch.evaluateCalc, mode: searchRoutingMode, providers: aiProviders() }) : null;
+    const intent = window.CommandBarIntent ? window.CommandBarIntent.classify(trimmed, { evaluate: window.OverlaySearch && window.OverlaySearch.evaluateCalc, mode: searchRoutingMode }) : null;
     if (intent && intent.type === 'AI') {
-      renderAiResults(intent.query, intent.forced, intent.providerId);
-      if (suggestionsEnabled && !intent.forced) {
+      renderAiResults(intent.query);
+      if (suggestionsEnabled) {
         suggestDebounceTimer = setTimeout(() => {
           if (queryToken !== currentQueryToken) return;
           fetchSuggestions(trimmed, queryToken, false, suppressGhost);
@@ -783,16 +818,16 @@
       }
       return;
     }
-    const explicitMatch = trimmed.match(/^(?:define|def|dict)\s+(.+)$/i) || trimmed.match(/^(.+)\s+(?:define|def|dict)$/i) || (window.CommandBarIntent && window.CommandBarIntent.explicitDictionary(trimmed) ? trimmed.match(/^(.+)\s*\?$/i) : null);
-    const targetWord = explicitMatch ? (explicitMatch[1] || explicitMatch[2] || explicitMatch[0]).replace(/\?$/, '').trim() : null;
+    const lookup = window.CommandBarIntent && window.CommandBarIntent.wordLookup(trimmed);
+    const targetWord = lookup && lookup.word;
     if (targetWord) {
-      activeDefItem = { type: 'DEF', data: { status: 'loading', word: targetWord }, title: `Define "${targetWord}"`, sub: 'Fetching definition from FreeDictionaryAPI...' };
+      activeDefItem = { type: 'DEF', data: { status: 'loading', word: targetWord, mode: lookup.mode }, title: `${lookup.mode === 'synonyms' ? 'Synonyms for' : 'Define'} "${targetWord}"`, sub: 'Checking spelling and looking up word…' };
     }
 
     searchDebounceTimer = setTimeout(() => {
       if (queryToken !== currentQueryToken) return;
       fetchUnifiedMatches(trimmed, searchAllWindowsByDefault, () => {
-        if (targetWord) handleDictionaryLookup(targetWord, queryToken);
+        if (targetWord) handleDictionaryLookup(targetWord, queryToken, lookup.mode);
       }, queryToken, suppressGhost);
     }, SEARCH_DEBOUNCE_MS);
   }
@@ -849,17 +884,35 @@
 
   function fetchHistoryScope(q, token) {
     const activeToken = token || currentQueryToken;
-      safeSendMessage({ type: 'QUERY_HISTORY', query: q, limit: 500 }, (res) => {
+    safeSendMessage({ type: 'QUERY_HISTORY', query: q, limit: 500 }, (res) => {
       if (activeToken !== currentQueryToken) return;
       const items = (res && res.history) || [];
+      getTabsCached(searchAllWindowsByDefault).then((tabs) => {
+      if (activeToken !== currentQueryToken) return;
       currentResults = window.CommandBarHistory ? window.CommandBarHistory.groupHistory(items, q, commandBarUsage).map((item) => item.type === 'HISTORY' ? Object.assign(item, { sub: item.sub + (window.CommandBarHistory.relativeTime(item.data.lastVisitTime) ? ' · ' + window.CommandBarHistory.relativeTime(item.data.lastVisitTime) : '') }) : item) : items.map((h) => ({ type: 'HISTORY', data: h, title: h.title, sub: h.url }));
+      currentResults = attachScopedTabs(currentResults, tabs, 'HISTORY');
       selectedIndex = firstSelectableIndex();
       renderResults();
+      });
     });
+  }
+  function attachScopedTabs(items, tabs, scope) {
+    const matching = new Map();
+    tabs.forEach(data => {
+      const key = window.CommandBarResults.destinationKey(data.url);
+      if (!matching.has(key)) matching.set(key, []);
+      matching.get(key).push({ type: 'TAB', data, title: data.title, icon: data.favIconUrl });
+    });
+    return items.map(item => {
+      if (item.type !== scope) return item;
+      const key = window.CommandBarResults.destinationKey(item.data.url);
+      if (!matching.has(key)) return Object.assign(item, { destinationKey: key });
+      return window.CommandBarResults.merge([item].concat(matching.get(key)), scope)[0];
+    }).map(item => Object.assign(item, { allWindows: searchAllWindowsByDefault }));
   }
 
   function isSelectable(item) {
-    return Boolean(item) && item.type !== 'HISTORY_GROUP';
+    return Boolean(item) && item.type !== 'HISTORY_GROUP' && !(item.type === 'CALC' && item.data.kind === 'error');
   }
 
   function firstSelectableIndex() {
@@ -883,63 +936,35 @@
     safeSendMessage({ type: 'QUERY_BOOKMARKS', query: q }, (res) => {
       if (activeToken !== currentQueryToken) return;
       const items = (res && res.bookmarks) || [];
-      currentResults = items.map((b) => ({ type: 'BOOKMARK', data: b, title: b.title, sub: b.url }));
+      getTabsCached(searchAllWindowsByDefault).then(tabs => {
+      if (activeToken !== currentQueryToken) return;
+      currentResults = attachScopedTabs(window.CommandBarResults.merge(items.map((b) => ({ type: 'BOOKMARK', data: b, title: b.title, sub: b.url })), 'BOOKMARK'), tabs, 'BOOKMARK');
       selectedIndex = 0;
       renderResults();
+      });
     });
   }
 
-  // Returns true if two candidates would autocomplete to the SAME target
-  // (i.e. they share a hostname). Several tabs/history entries open on
-  // the same site (e.g. five different claude.ai conversations) are not
-  // genuinely ambiguous for autocomplete purposes -- they'd all complete
-  // to "claude.ai" anyway -- so the margin-of-confidence check below only
-  // needs to fire when the top two candidates would complete to
-  // DIFFERENT strings (a real "amazon vs. amtrak" style ambiguity).
-  function sameCompletionHost(a, b) {
+  // Prefer the first ranked address prefix even when another website scores
+  // nearly as highly. A search suggestion must not replace a matching link.
+  function websiteCompletion(queryText, item) {
+    const query = queryText.toLowerCase();
+    const url = item.data && item.data.url || '';
     try {
-      const hostA = new URL((a.data.url || '').toLowerCase()).hostname.replace(/^www\./, '');
-      const hostB = new URL((b.data.url || '').toLowerCase()).hostname.replace(/^www\./, '');
-      return Boolean(hostA) && hostA === hostB;
-    } catch (e) {
-      return false;
-    }
+      const parsed = new URL(url);
+      const host = parsed.hostname.replace(/^www\./, '');
+      const address = `${host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      for (const candidate of [address, url.replace(/^https?:\/\//, ''), url]) {
+        if (candidate.toLowerCase().startsWith(query)) return candidate;
+      }
+    } catch (_) {}
+    return null;
   }
 
-  // Decides whether the top-scored tab/history match is confident enough
-  // to become the default match (both the inline-selection autocomplete
-  // AND what Enter opens). Recalibrated for the stricter, substring-based
-  // fuzzyScore: a genuine prefix match already scores well above this
-  // floor on its own, so CONFIDENCE_THRESHOLD is now a defensive floor
-  // rather than the primary gate. The real gate is matchesPrefix (must be
-  // a literal hostname/title/url prefix) plus the same-host margin
-  // bypass, which is what stops "five tabs on the same domain" from
-  // wrongly falling through to a plain web search.
   function pickConfidentTop(queryText, scoredItems) {
-    if (!queryText || scoredItems.length === 0) return null;
-    const top = scoredItems[0];
-    const second = scoredItems[1];
-    const qLower = queryText.toLowerCase();
-    const urlLower = (top.data.url || '').toLowerCase();
-    const titleLower = (top.title || '').toLowerCase();
-
-    let matchesPrefix = false;
-    try {
-      const host = new URL(urlLower).hostname.replace(/^www\./, '');
-      if (host.startsWith(qLower)) matchesPrefix = true;
-    } catch (e) {}
-    if (!matchesPrefix && (urlLower.startsWith(qLower) || titleLower.startsWith(qLower))) {
-      matchesPrefix = true;
-    }
-    if (!matchesPrefix) return null;
-
-    const CONFIDENCE_THRESHOLD = 40;
-    const MARGIN_RATIO = 1.3;
-    const clearsThreshold = top.score >= CONFIDENCE_THRESHOLD;
-    const noRealAmbiguity = !second || sameCompletionHost(top, second) || top.score >= second.score * MARGIN_RATIO;
-
-    if (clearsThreshold && noRealAmbiguity) return top;
-    return null;
+    if (!queryText) return null;
+    return scoredItems.find(item => websiteCompletion(queryText, item)) ||
+      scoredItems.find(item => (item.title || '').toLowerCase().startsWith(queryText.toLowerCase())) || null;
   }
 
   function fetchUnifiedMatches(queryText, allWindows, onComplete, token, suppressGhost) {
@@ -951,7 +976,7 @@
       if (!queryText) {
         let tabItems = tabs.map((t) => ({ type: 'TAB', data: t, title: t.title, sub: t.url, icon: t.favIconUrl, frecency: t.frecency || 0 }));
         tabItems.sort((a, b) => b.frecency - a.frecency);
-        currentResults = tabItems;
+        currentResults = window.CommandBarResults.merge(tabItems).map(item => Object.assign(item, { allWindows }));
         selectedIndex = 0;
         clearAutocomplete();
         renderResults();
@@ -959,67 +984,33 @@
         return;
       }
 
-      const itemMap = new Map();
-      for (const t of tabs) {
-        const itemData = { title: t.title, url: t.url, frecency: t.frecency || 0, source: 'TAB', active: t.active, pinned: t.pinned };
-        const score = (window.OverlaySearch ? window.OverlaySearch.calculateCompositeScore(queryText, itemData, { source: 'TAB' }) : 0) + usageBoost(queryText, { type: 'TAB', data: t });
-        if (score > 0) {
-          const key = window.CommandBarHistory ? window.CommandBarHistory.normalizeUrl(t.url) : (t.url || '').toLowerCase();
-          itemMap.set(key, { type: 'TAB', data: t, title: t.title, sub: t.url, icon: t.favIconUrl, score, badges: ['TAB'] });
+      const candidates = [];
+      for (const [type, entries] of [['TAB', tabs], ['HISTORY', historyItems], ['BOOKMARK', bookmarks]]) {
+        for (const data of entries) {
+          const score = (window.OverlaySearch ? window.OverlaySearch.calculateCompositeScore(queryText,
+            Object.assign({}, data, { source: type }), { source: type }) : 0) + usageBoost(queryText, { type, data });
+          if (score > 0) candidates.push({ type, data, title: data.title, sub: data.url, icon: data.favIconUrl, score, badges: [type] });
         }
       }
-      const rankedHistory = window.CommandBarHistory ? window.CommandBarHistory.dedupeHistory(historyItems, queryText, commandBarUsage) : historyItems;
-      for (const h of rankedHistory) {
-        const key = window.CommandBarHistory ? window.CommandBarHistory.normalizeUrl(h.url) : (h.url || '').toLowerCase();
-        const itemData = { title: h.title, url: h.url, frecency: h.frecency || 0, visitCount: h.visitCount, typedCount: h.typedCount, source: 'HISTORY' };
-        const score = (window.OverlaySearch ? window.OverlaySearch.calculateCompositeScore(queryText, itemData, { source: 'HISTORY' }) : 0) + usageBoost(queryText, { type: 'HISTORY', data: h });
-        if (score > 0) {
-          if (itemMap.has(key)) {
-            const existing = itemMap.get(key);
-            if (existing.type === 'TAB' && score > existing.score) {
-              itemMap.set(key, { type: 'HISTORY', data: h, title: h.title, sub: h.url, score, badges: ['HISTORY', 'TAB'], tab: existing.data });
-            } else {
-              existing.score += score * 0.15;
-              if (!existing.badges.includes('HISTORY')) existing.badges.push('HISTORY');
-            }
-          } else {
-            itemMap.set(key, { type: 'HISTORY', data: h, title: h.title, sub: h.url, score, badges: ['HISTORY'] });
-          }
-        }
-      }
-
-      for (const b of bookmarks) {
-        const itemData = { title: b.title, url: b.url, source: 'BOOKMARK' };
-        const score = window.OverlaySearch
-          ? window.OverlaySearch.calculateCompositeScore(queryText, itemData, { source: 'BOOKMARK' })
-          : 0;
-        if (score <= 0) continue;
-        const key = window.CommandBarHistory ? window.CommandBarHistory.normalizeUrl(b.url) : (b.url || '').toLowerCase();
-        const bookmarkItem = { type: 'BOOKMARK', data: b, title: b.title, sub: b.url, score, badges: ['BOOKMARK'] };
-        if (!itemMap.has(key)) {
-          itemMap.set(key, bookmarkItem);
-        } else {
-          const existing = itemMap.get(key);
-          if (!existing.badges.includes('BOOKMARK')) existing.badges.push('BOOKMARK');
-          // History remains the preferred representation whenever it has a
-          // real match; otherwise a bookmark can replace a weaker tab hit.
-          if (existing.type === 'TAB' && score > existing.score) itemMap.set(key, bookmarkItem);
-        }
-      }
-
-      const scoredItems = Array.from(itemMap.values());
+      // Matching tabs remain actionable even when only history/bookmark metadata matched the query.
+      const matchingKeys = new Set(candidates.map(item => window.CommandBarResults.destinationKey(item.data.url)));
+      tabs.forEach(data => {
+        if (matchingKeys.has(window.CommandBarResults.destinationKey(data.url))) candidates.push({ type: 'TAB', data, title: data.title, sub: data.url, icon: data.favIconUrl, score: 0 });
+      });
+      const scoredItems = window.CommandBarResults.merge(candidates).map(item => Object.assign(item, { allWindows }));
       scoredItems.sort((a, b) => b.score - a.score);
       const cappedMatches = scoredItems.slice(0, resultLimit || MAX_MATCH_RESULTS);
 
+      const navigationUrl = window.CommandBarIntent?.navigationUrl(queryText);
       const searchItem = {
         type: 'SEARCH', data: { query: queryText },
-        title: `Search Web for "${queryText}"`, sub: 'Helium default',
-        badges: ['SEARCH'], score: SEARCH_ACTION_SCORE
+        title: navigationUrl ? `Open ${queryText}` : `Search Web for "${queryText}"`, sub: navigationUrl || 'Search the web',
+        badges: [navigationUrl ? 'URL' : 'SEARCH'], score: SEARCH_ACTION_SCORE
       };
 
-      const explicitMatch = queryText.match(/^(?:define|def|dict)\s+(.+)$/i) || queryText.match(/^(.+)\s+(?:define|def|dict)$/i) || queryText.match(/^(.+)\s*\?$/i);
-      const isExplicitDef = Boolean(explicitMatch);
-      const confidentTop = pickConfidentTop(queryText, cappedMatches);
+      const isExplicitDef = Boolean(window.CommandBarIntent && window.CommandBarIntent.wordLookup(queryText));
+      const confidentTop = !navigationUrl && !suppressGhost && !completionBlocked(queryText)
+        ? pickConfidentTop(queryText, cappedMatches) : null;
       if (confidentTop) confidentTop.autocompleted = true;
 
       // Phase 1: rank everything by relevance only.
@@ -1070,7 +1061,7 @@
       if (queryText !== typedQuery.trim() || suppressGhost || isKeyboardNav || autocompleteActive || completionBlocked(queryText)) return;
 
       const aiSearch = currentResults.some((item) => item.type === 'AI');
-      const promotesSuggestions = !aiSearch && window.OverlaySearch && window.OverlaySearch.shouldPromoteSuggestions
+      const promotesSuggestions = !aiSearch && !window.CommandBarIntent?.navigationUrl(queryText) && window.OverlaySearch && window.OverlaySearch.shouldPromoteSuggestions
         ? window.OverlaySearch.shouldPromoteSuggestions(queryText, { hasStrongLocalMatch: currentResults.some((item) => item.autocompleted) })
         : false;
 
@@ -1105,6 +1096,7 @@
   }
 
   function getItemKey(item) {
+    if (item.destinationKey) return "URL:" + item.destinationKey;
     switch (item.type) {
       case 'HISTORY_GROUP': return 'HISTORY_GROUP:' + item.group;
       case 'TAB': return 'TAB:' + item.data.id;
@@ -1113,113 +1105,64 @@
       case 'ACTION': return 'ACTION:' + item.data.id;
       case 'SEARCH': return 'SEARCH:' + item.data.query;
       case 'SUGGESTION': return 'SUGGESTION:' + item.data.query;
-      case 'AI': return 'AI:' + item.data.provider.id;
+      case 'AI': return 'AI:' + item.data.query;
       case 'CALC': return 'CALC';
       case 'DEF': return 'DEF:' + item.data.word;
       default: return item.type + ':' + item.title;
     }
   }
 
-  function buildStandardRow() {
-    const li = document.createElement('li');
-    const left = document.createElement('div');
-    left.className = 'result-left';
-    const icon = document.createElement('img');
-    icon.className = 'result-icon';
-    icon.style.display = 'none';
-    icon.onerror = () => { icon.style.display = 'none'; };
-    left.appendChild(icon);
-    const titleSpan = document.createElement('span');
-    titleSpan.className = 'result-title';
-    const text = document.createElement('div');
-    text.className = 'result-text';
-    const heading = document.createElement('div');
-    heading.className = 'result-heading';
-    heading.appendChild(titleSpan);
-    text.appendChild(heading);
-    left.appendChild(text);
-
-    const pinSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    pinSvg.setAttribute('viewBox', '0 0 24 24');
-    pinSvg.setAttribute('class', 'status-icon');
-    pinSvg.style.display = 'none';
-    pinSvg.innerHTML = '<path d="M16 12V4H17V2H7V4H8V12L6 14V16H11V22H13V16H18V14L16 12Z"/>';
-    heading.appendChild(pinSvg);
-
-    const muteSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    muteSvg.setAttribute('viewBox', '0 0 24 24');
-    muteSvg.setAttribute('class', 'status-icon');
-    muteSvg.style.display = 'none';
-    muteSvg.innerHTML = '<path d="M3.63 3.63L2.22 5.04L7.29 10.11L7 10.4V13.6H10.2L14.2 17.6V17.02L17.7 20.52L19.11 19.11L3.63 3.63ZM14.2 6.4L12.45 8.15L14.2 9.9V6.4ZM16.5 12C16.5 10.23 15.48 8.71 14 7.97V10.18L16.45 12.63C16.48 12.43 16.5 12.22 16.5 12ZM19 12C19 12.94 18.8 13.82 18.46 14.64L19.97 16.15C20.62 14.91 21 13.5 21 12C21 7.72 18 4.14 14 3.23V5.29C16.89 6.15 19 8.83 19 12Z"/>';
-    heading.appendChild(muteSvg);
-
-    const subSpan = document.createElement('span');
-    subSpan.className = 'result-sub';
-    subSpan.style.display = 'none';
-    text.appendChild(subSpan);
-
-    const badgeContainer = document.createElement('div');
-    badgeContainer.className = 'badge-container';
-
-    li.appendChild(left);
-    li.appendChild(badgeContainer);
-    li.refs = { icon, titleSpan, pinSvg, muteSvg, subSpan, badgeContainer };
-    return li;
+  const resolvedIcons = new Map();
+  const requestedIcons = new Set();
+  const fallbackPaths = {
+    SEARCH: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6',
+    ACTION: 'M13 2L4 14h7l-1 8 10-12h-7z',
+    CALC: 'M5 3h14v18H5z M8 7h8 M8 12h2 M14 12h2 M8 17h2 M14 17h2',
+    DEF: 'M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3z M12 6v15',
+    AI: 'M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z',
+    SITE: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18'
+  };
+  function fallbackIcon(type) {
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#b9c4d5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="' + (fallbackPaths[type] || fallbackPaths.SITE) + '"/></svg>');
   }
-
-  function updateStandardRow(li, item, query, index) {
-    const refs = li.refs;
-    if (item.type === 'TAB' && item.icon) {
-      if (refs.icon.getAttribute('src') !== item.icon) refs.icon.src = item.icon;
-      refs.icon.style.display = '';
-    } else {
-      refs.icon.style.display = 'none';
-      if (refs.icon.hasAttribute('src')) refs.icon.removeAttribute('src');
+  function resolveVisibleIcons() {
+    const token = currentQueryToken;
+    const items = currentResults.filter(item => ['TAB', 'HISTORY', 'BOOKMARK'].includes(item.type))
+      .filter(item => {
+        const row = rowNodeMap.get(getItemKey(item));
+        if (!row || !row.getBoundingClientRect || !resultsContainer.getBoundingClientRect) return true;
+        const rect = row.getBoundingClientRect(), viewport = resultsContainer.getBoundingClientRect();
+        return rect.bottom > viewport.top && rect.top < viewport.bottom;
+      }).slice(0, 20).map(item => ({ key: getItemKey(item), url: item.data.url, icon: item.icon, tabId: item.tab && item.tab.id || (item.type === 'TAB' ? item.data.id : undefined) }))
+      .filter(item => !requestedIcons.has(item.key));
+    if (!items.length) return;
+    items.forEach(item => requestedIcons.add(item.key));
+    if (requestedIcons.size > 512) {
+      for (const key of requestedIcons) { if (!items.some(item => item.key === key)) requestedIcons.delete(key); if (requestedIcons.size <= 256) break; }
     }
-    refs.titleSpan.innerHTML = highlightMatches(item.title, query);
-    refs.pinSvg.style.display = (item.type === 'TAB' && item.data.pinned) ? '' : 'none';
-    refs.muteSvg.style.display = (item.type === 'TAB' && item.data.muted) ? '' : 'none';
-    if (item.sub) {
-      refs.subSpan.innerHTML = highlightMatches(item.sub, query);
-      refs.subSpan.style.display = '';
-    } else {
-      refs.subSpan.innerHTML = '';
-      refs.subSpan.style.display = 'none';
-    }
-    const badgeList = item.badges || (item.type ? [item.type] : []);
-    const existingBadges = Array.from(refs.badgeContainer.children).map((b) => b.textContent);
-    if (existingBadges.join(',') !== badgeList.join(',')) {
-      refs.badgeContainer.innerHTML = '';
-      badgeList.forEach((bText) => {
-        const badge = document.createElement('span');
-        badge.className = 'result-badge';
-        badge.textContent = bText;
-        refs.badgeContainer.appendChild(badge);
-      });
-    }
-    li.className = 'result-item' + (index === selectedIndex ? ' selected' : '');
-    li.setAttribute('role', 'option');
-    li.setAttribute('aria-selected', index === selectedIndex ? 'true' : 'false');
-    li.onclick = () => { explicitSelection = true; selectedIndex = index; executeSelected(); };
-  }
-
-  function buildCardRow() {
-    return document.createElement('li');
-  }
-  function updateCardRow(li, item, index) {
-    li.className = 'result-item result-item-card' + (index === selectedIndex ? ' selected' : '');
-    li.setAttribute('role', 'option');
-    li.setAttribute('aria-selected', index === selectedIndex ? 'true' : 'false');
-    if (window.OverlayCard) {
-      window.OverlayCard.renderInlineCard(li, item, {
-        onOpenAppleDict: (word) => {
-          safeSendMessage({ type: 'OPEN_APPLE_DICT', word });
-          input.value = word;
-          hideOverlay();
+    // Return each icon independently: one slow site cannot hold up the others.
+    items.forEach(item => safeSendMessage({ type: 'RESOLVE_SITE_ICONS', items: [item] }, response => {
+      if (token !== currentQueryToken || !isVisible) {
+        requestedIcons.delete(item.key);
+        if (isVisible) resolveVisibleIcons();
+        return;
+      }
+      (response && response.icons || []).forEach(icon => {
+        if (icon.key !== item.key) return;
+        if (/^data:image\/(svg\+xml|png|jpeg|gif|webp|x-icon|vnd.microsoft.icon);base64,/.test(icon.src)) {
+          resolvedIcons.set(icon.key, icon.src);
+          if (resolvedIcons.size > 256) resolvedIcons.delete(resolvedIcons.keys().next().value);
         }
       });
-    }
-    li.onclick = () => { explicitSelection = true; selectedIndex = index; executeSelected(); };
+      const current = currentResults.find(result => getItemKey(result) === item.key);
+      const row = rowNodeMap.get(item.key);
+      if (current && row && row.refs) updateRowIcon(row, current);
+    }));
+  }
+
+  function updateRowIcon(li, item) {
+    const supplied = /^(https?:|data:image\/)/i.test(item.icon || '') ? item.icon : '';
+    view.updateIcon(getItemKey(item), resolvedIcons.get(getItemKey(item)) || supplied || fallbackIcon(item.type));
   }
 
   function executeResult(item, e) {
@@ -1228,20 +1171,18 @@
       executeSearch(item.data && item.data.query ? item.data.query : input.value, e);
       return;
     }
-    if (item.type === 'TAB') {
+    if (['TAB', 'HISTORY', 'BOOKMARK'].includes(item.type)) {
       recordCommandUsage(completionState === 'accepted' ? lastAcceptedTypedQuery.trim() : input.value.trim(), item);
-      safeSendMessage({ type: 'FOCUS_TAB', tabId: item.data.id, windowId: item.data.windowId });
-      hideOverlay();
-    } else if (item.type === 'HISTORY' || item.type === 'BOOKMARK') {
-      recordCommandUsage(completionState === 'accepted' ? lastAcceptedTypedQuery.trim() : input.value.trim(), item);
-      safeSendMessage({ type: 'CREATE_TAB', url: item.data.url, visitKind: item.autocompleted ? 'typed' : 'link' });
+      safeSendMessage({ type: 'FOCUS_DESTINATION', url: item.data.url, windowId: (item.tab || item.data).windowId, allWindows: Boolean(item.allWindows) });
       hideOverlay();
     } else if (item.type === 'CALC') {
-      navigator.clipboard.writeText(item.data.query || item.data.expression || '').catch(() => {});
+      navigator.clipboard.writeText(item.data.copyText || item.data.expression || '').catch(() => {});
       hideOverlay();
     } else if (item.type === 'DEF') {
       const defData = item.data;
-      if (defData.status === 'success' && Array.isArray(defData.meanings) && defData.meanings[0]) {
+      if (defData.status === 'success' && defData.mode === 'synonyms') {
+        navigator.clipboard.writeText((defData.synonyms || []).join(', ')).catch(() => {});
+      } else if (defData.status === 'success' && Array.isArray(defData.meanings) && defData.meanings[0]) {
         const textToCopy = defData.word + ': ' + (defData.meanings[0].definitions[0] && defData.meanings[0].definitions[0].definition);
         navigator.clipboard.writeText(textToCopy).catch(() => {});
       } else {
@@ -1252,14 +1193,8 @@
     } else if (item.type === 'SEARCH' || item.type === 'SUGGESTION') {
       executeSearch(item.data.query, e);
     } else if (item.type === 'AI') {
-      const provider = item.data.provider;
-      if (provider.type === 'browser-default') {
-        safeSendMessage({ type: 'SEARCH_QUERY', text: item.data.query });
-        hideOverlay();
-      } else if (provider.type === 'url' && typeof CommandBarSearchEngines !== 'undefined') {
-        safeSendMessage({ type: 'CREATE_TAB', url: CommandBarSearchEngines.buildUrl(provider.url, item.data.query), visitKind: 'typed' });
-        hideOverlay();
-      }
+      safeSendMessage({ type: 'SEARCH_QUERY', text: item.data.query });
+      hideOverlay();
     } else if (item.type === 'ACTION') {
       const actionId = item.data.id;
       recordActionUsage(actionId);
@@ -1285,9 +1220,10 @@
 
   input.addEventListener('input', (e) => {
     e.stopPropagation();
+    if (e.isComposing) return;
+    if (e.inputType) lastEditWasDeletion = e.inputType.startsWith('delete');
     if (completionState === 'cancelled' && input.value !== cancelledCompletionQuery) {
       cancelledCompletionQuery = null;
-      lastEditWasDeletion = false;
       lastAcceptedTypedQuery = '';
       clearAutocomplete();
     } else if (autocompleteActive || completionState === 'accepted') {
@@ -1307,8 +1243,13 @@
     input.addEventListener(eventType, (e) => e.stopPropagation());
   });
 
+  let isComposing = false;
+  input.addEventListener('compositionstart', () => { isComposing = true; });
+  input.addEventListener('compositionend', () => { isComposing = false; typedQuery = input.value; explicitSelection = false; updateSearch(); });
+
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return;
     const keyLower = (e.key || '').toLowerCase();
     const isVimDown = e.ctrlKey && keyLower === 'j';
     const isVimUp = e.ctrlKey && keyLower === 'k';
@@ -1381,11 +1322,15 @@
         executeSearch(autocompleteActive && autocompleteSuffixSelected ? typedQuery : input.value, e);
         return;
       }
+      if (!explicitSelection && !autocompleteActive && !currentResults[0]?.autocompleted && window.CommandBarIntent.navigationUrl(input.value)) {
+        executeSearch(input.value, e);
+        return;
+      }
       if (autocompleteActive && autocompleteSuffixSelected) {
         const query = typedQuery.trim();
         const target = completionTarget;
         clearAutocomplete();
-        if (target && (target.type === 'TAB' || target.type === 'HISTORY' || target.type === 'BOOKMARK')) {
+        if (target) {
           executeResult(target, e);
         } else {
           executeSearch(query, e);
@@ -1393,7 +1338,7 @@
         return;
       }
       if (!explicitSelection) {
-        if (currentResults[0] && currentResults[0].type === 'AI') {
+        if (currentResults[0] && (currentResults[0].autocompleted || ['AI', 'CALC', 'DEF'].includes(currentResults[0].type))) {
           executeResult(currentResults[0], e);
           return;
         }
@@ -1413,53 +1358,27 @@
 
   function renderResults() {
     const query = input.value.trim();
-
-    if (currentResults.length === 0) {
-      clearResultNodes();
-      const emptyLi = document.createElement('li');
-      emptyLi.className = 'result-item empty-state';
-      emptyLi.style.cursor = 'default';
-      emptyLi.style.color = 'rgba(255, 255, 255, 0.35)';
-      emptyLi.textContent = 'No matching tabs, history, actions, or definitions';
-      resultsList.appendChild(emptyLi);
-      return;
+    const previousHeight = resultsPanel.offsetHeight;
+    if (explicitSelection && !isKeyboardNav) {
+      const selected = Array.from(rowNodeMap.entries()).find(([, row]) => row.getAttribute('aria-selected') === 'true');
+      const index = selected ? currentResults.findIndex(item => getItemKey(item) === selected[0]) : -1;
+      if (index >= 0) selectedIndex = index;
     }
-
-    resultsList.querySelector('.empty-state')?.remove();
-    const seenKeys = new Set();
-    currentResults.forEach((item, index) => {
-      const key = getItemKey(item);
-      seenKeys.add(key);
-      if (item.type === 'HISTORY_GROUP') {
-        let groupLi = rowNodeMap.get(key);
-        if (!groupLi) { groupLi = document.createElement('li'); rowNodeMap.set(key, groupLi); }
-        groupLi.className = 'history-group-header';
-        groupLi.textContent = item.group + ' · ' + item.count;
-        resultsList.appendChild(groupLi);
-        return;
-      }
-      const isCard = item.type === 'CALC' || item.type === 'DEF';
-      let li = rowNodeMap.get(key);
-      if (!li) {
-        li = isCard ? buildCardRow() : buildStandardRow();
-        rowNodeMap.set(key, li);
-      }
-      if (isCard) updateCardRow(li, item, index);
-      else updateStandardRow(li, item, query, index);
-      resultsList.appendChild(li);
-    });
-
-    rowNodeMap.forEach((li, key) => {
-      if (!seenKeys.has(key)) { li.remove(); rowNodeMap.delete(key); }
-    });
-
-    const selectedElem = resultsList.children[selectedIndex];
-    if (isKeyboardNav && selectedElem) {
-      selectedElem.scrollIntoView({ block: 'nearest' });
-    } else {
-      resultsContainer.scrollTop = 0;
+    const previous = new Set(rowNodeMap.keys());
+    for (const [key, row] of rowNodeMap) {
+      if (!currentResults.some(item => getItemKey(item) === key)) stopResultAnimation(row);
     }
+    view.update({ items: currentResults, query, selectedIndex, empty: true });
+    const inserted = [...rowNodeMap].filter(([key]) => !previous.has(key)).map(([, row]) => row);
+    const selectedElem = currentResults[selectedIndex] && rowNodeMap.get(getItemKey(currentResults[selectedIndex]));
+    if (isKeyboardNav && selectedElem) selectedElem.scrollIntoView({ block: 'nearest' });
+    else resultsContainer.scrollTop = 0;
     isKeyboardNav = false;
+    input.setAttribute('aria-activedescendant', selectedElem?.id || '');
+    finishResultRender(previousHeight, inserted);
+    decorations.track(300);
+    caretAura.sync();
+    resolveVisibleIcons();
   }
 
   if (isContextValid()) {
@@ -1471,8 +1390,7 @@
           toggleOverlay();
           sendResponse({ handled: true });
         }
-        // runtime messages reach other extension pages too. Visibility is a
-        // notification for the background, never a request to rebroadcast.
+        // Ignore unrelated notifications received by other extension pages.
       });
     } catch (e) {}
   }

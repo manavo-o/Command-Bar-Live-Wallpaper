@@ -38,7 +38,7 @@
   }
 
   function sanitizeEngine(raw) {
-    if (!raw || typeof raw !== 'object') return null;
+    if (!raw || typeof raw !== 'object' || raw.type === 'api') return null;
     const name = String(raw.name || '').trim();
     let url = String(raw.url || raw.template || '').trim();
     const shortcut = normalizeShortcut(raw.shortcut);
@@ -46,10 +46,7 @@
     try { url = normalizeUrlTemplate(url); } catch (e) { return null; }
     return {
       id: String(raw.id || `engine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
-      name: name.slice(0, 80), url, shortcut, enabled: raw.enabled !== false,
-      type: raw.type === 'api' ? 'api' : 'url', icon: String(raw.icon || '').slice(0, 300),
-      trigger: String(raw.trigger || '').trim().slice(0, 40), isAi: Boolean(raw.isAi),
-      api: raw.api && typeof raw.api === 'object' ? { endpoint: String(raw.api.endpoint || '').slice(0, 300), model: String(raw.api.model || '').slice(0, 100) } : null
+      name: name.slice(0, 80), url, shortcut, enabled: raw.enabled !== false
     };
   }
 
@@ -67,9 +64,5 @@
     return sanitizeEngines(engines).find((engine) => engine.enabled && engine.shortcut === shortcut) || null;
   }
 
-  function builtInAiEngines() {
-    return [{ id: 'perplexity', name: 'Perplexity', url: 'https://www.perplexity.ai/search?q={query}', shortcut: '', enabled: true, type: 'url', icon: '✦', trigger: 'q%', isAi: true, api: null }];
-  }
-
-  return { MODIFIERS, SHORTCUT_LABELS, normalizeShortcut, shortcutLabel, normalizeUrlTemplate, buildUrl, sanitizeEngine, sanitizeEngines, findByShortcut, builtInAiEngines };
+  return { MODIFIERS, SHORTCUT_LABELS, normalizeShortcut, shortcutLabel, normalizeUrlTemplate, buildUrl, sanitizeEngine, sanitizeEngines, findByShortcut };
 }));
