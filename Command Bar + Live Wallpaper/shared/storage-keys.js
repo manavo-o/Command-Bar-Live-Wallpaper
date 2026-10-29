@@ -4,6 +4,7 @@
     wallpapers: 'wallpapers',
     activeWallpaperId: 'activeWallpaperId',
     widgetPos: 'widgetPos',
+    dashboardPos: 'dashboardPos',
     focusTimerState: 'focusTimerState',
     searchAllWindowsByDefault: 'searchAllWindowsByDefault',
     disabledActions: 'disabledActions',
@@ -40,16 +41,11 @@
     parallaxEnabled: 'parallaxEnabled'
     ,storageSchemaVersion: 'storageSchemaVersion'
     ,actionFavorites: 'actionFavorites'
-    ,customQuickLinks: 'customQuickLinks'
     ,commandBarResultLimit: 'commandBarResultLimit'
     ,commandBarSuggestionsEnabled: 'commandBarSuggestionsEnabled'
     ,commandBarAutocompleteEnabled: 'commandBarAutocompleteEnabled'
     ,commandBarDensity: 'commandBarDensity'
-    ,preferredSearchEngine: 'preferredSearchEngine'
     ,customSearchEngines: 'customSearchEngines'
     ,searchRoutingMode: 'searchRoutingMode'
-    ,aiRoutingEnabled: 'aiRoutingEnabled'
-    ,questionDetectionEnabled: 'questionDetectionEnabled'
-    ,aiDefaultProvider: 'aiDefaultProvider'
   });
 }(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : globalThis)));

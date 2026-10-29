@@ -144,7 +144,7 @@
   // Loads a specific wallpaper (by id) from the library into the DOM.
   // Refactored out of the old top-level IIFE body so rotation/schedule
   // logic can call it repeatedly instead of only running once at page load.
-  function loadWallpaperMedia(id, opts) {
+  function loadWallpaperMedia(id) {
     if (isInactive()) return;
     if (id === currentDisplayedId) {
       if (pendingWallpaperId && pendingWallpaperId !== id) { mediaGeneration++; pendingWallpaperId = null; }
@@ -419,96 +419,10 @@
   // ----------------------------------------------------------------------
   // Draggable widgets container with magnetic safe-zone snapping.
   // ----------------------------------------------------------------------
-  function makeDraggable(elem) {
-    let isDragging = false, startX, startY, initialLeft, initialTop, lastSnap = '';
-    const guides = { vertical: null, horizontal: null };
-    const ensureGuide = (axis) => {
-      if (guides[axis]) return guides[axis];
-      const guide = document.createElement('div');
-      guide.className = `snap-guide ${axis}`;
-      document.body.appendChild(guide);
-      guides[axis] = guide;
-      return guide;
-    };
-    const hideGuides = () => Object.values(guides).forEach((guide) => guide && guide.classList.remove('visible'));
-    const snapPosition = (left, top, width, height) => {
-      const margin = Math.max(18, Math.min(48, window.innerWidth * 0.04));
-      const grid = 16;
-      const candidatesX = [margin, window.innerWidth - width - margin, (window.innerWidth - width) / 2];
-      const candidatesY = [margin, window.innerHeight - height - margin, (window.innerHeight - height) / 2];
-      const snap = (value, candidates) => {
-        let best = Math.round(value / grid) * grid;
-        let distance = 10;
-        candidates.forEach((candidate) => {
-          if (Math.abs(value - candidate) < distance) { best = candidate; distance = Math.abs(value - candidate); }
-        });
-        return { value: best, snapped: distance < 10 };
-      };
-      const x = snap(left, candidatesX);
-      const y = snap(top, candidatesY);
-      return { left: Math.max(margin, Math.min(window.innerWidth - width - margin, x.value)), top: Math.max(margin, Math.min(window.innerHeight - height - margin, y.value)), xSnapped: x.snapped, ySnapped: y.snapped };
-    };
-    const showGuides = (position, width, height) => {
-      const vertical = ensureGuide('vertical');
-      const horizontal = ensureGuide('horizontal');
-      const centerX = Math.abs(position.left + width / 2 - window.innerWidth / 2) < 10;
-      const centerY = Math.abs(position.top + height / 2 - window.innerHeight / 2) < 10;
-      vertical.style.left = `${position.left + width / 2}px`;
-      horizontal.style.top = `${position.top + height / 2}px`;
-      vertical.classList.toggle('visible', centerX);
-      horizontal.classList.toggle('visible', centerY);
-    };
-    chrome.storage.local.get(['widgetPos'], (res) => {
-      if (res && res.widgetPos) {
-        const rect = elem.getBoundingClientRect();
-        const position = snapPosition(res.widgetPos.left, res.widgetPos.top, rect.width || 220, rect.height || 100);
-        elem.style.left = position.left + 'px';
-        elem.style.top = position.top + 'px';
-      }
-    });
-
-    elem.addEventListener('mousedown', (e) => {
-      if (e.target.closest('button, a, input, select, textarea')) return;
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      const rect = elem.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-      elem.style.transition = 'none';
-      elem.classList.add('is-dragging');
-      lastSnap = '';
-      if (window.CommandBarUI) window.CommandBarUI.tactile('press');
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const rect = elem.getBoundingClientRect();
-      const position = snapPosition(initialLeft + dx, initialTop + dy, rect.width, rect.height);
-      elem.style.left = `${position.left}px`;
-      elem.style.top = `${position.top}px`;
-      showGuides(position, rect.width, rect.height);
-      const snapKey = `${position.xSnapped}:${position.ySnapped}`;
-      if (snapKey !== lastSnap && (position.xSnapped || position.ySnapped)) {
-        lastSnap = snapKey;
-        if (window.CommandBarUI) window.CommandBarUI.tactile('snap');
-      }
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      elem.classList.remove('is-dragging');
-      elem.style.transition = '';
-      hideGuides();
-      const rect = elem.getBoundingClientRect();
-      chrome.storage.local.set({ widgetPos: { left: rect.left, top: rect.top } });
-      if (window.CommandBarUI) window.CommandBarUI.tactile('success');
-    });
+  if (window.WidgetDashboard) {
+    const disposeDashboard = window.WidgetDashboard.mount(document, window, chrome);
+    window.addEventListener('unload', disposeDashboard, { once: true });
   }
-  makeDraggable(widgetsContainer);
 
   // ----------------------------------------------------------------------
   // Clock / date widget (unchanged from v1)
@@ -541,7 +455,11 @@
             const ampm = hrs >= 12 ? 'PM' : 'AM';
             hrs = hrs % 12 || 12;
             const mins = String(now.getMinutes()).padStart(2, '0');
-            widgetClock.textContent = `${hrs}:${mins} ${ampm}`;
+            widgetClock.textContent = `${hrs}:${mins}`;
+            const period = document.createElement('span');
+            period.className = 'clock-period';
+            period.textContent = ` ${ampm}`;
+            widgetClock.appendChild(period);
           }
         } else {
           widgetClock.style.display = 'none';
@@ -627,6 +545,13 @@
     const temp = Math.round(data.current.temperature_2m);
     weatherTempEl.textContent = `${temp}°${units === 'c' ? 'C' : 'F'}`;
     weatherDescEl.textContent = WMO_DESCRIPTIONS[data.current.weather_code] || 'Weather';
+    weatherDescEl.title = '';
+    const icon = document.getElementById('weather-condition-icon');
+    if (icon && icon.querySelector) {
+      const code = Number(data.current.weather_code);
+      const path = icon.querySelector('path');
+      if (path) path.setAttribute('d', code < 2 ? 'M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6L7 7m10 10 1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0' : code < 50 ? 'M6 18h12a4 4 0 0 0 0-8 6 6 0 0 0-11-1 4.5 4.5 0 0 0-1 9' : 'M6 15h12a3 3 0 0 0 0-6 5 5 0 0 0-9-1 3.5 3.5 0 0 0-3 7 M8 18l-1 3m6-3-1 3m6-3-1 3');
+    }
   }
 
   let weatherGeneration = 0;
@@ -707,6 +632,7 @@
           && res.weatherCache.locationMode === res.weatherLocationMode;
         if (cacheFresh) {
           renderWeather(res.weatherCache.data, res.weatherUnits);
+          weatherDescEl.title = 'Saved forecast · updates automatically';
           if (res.weatherLocationMode === 'manual') weatherPlaceEl.textContent = res.weatherManualLabel || '';
           return;
         }
@@ -762,6 +688,7 @@
       const [text, author] = QUOTES[Math.floor(Math.random() * QUOTES.length)];
       quoteTextEl.textContent = `\u201c${text}\u201d`;
       quoteAuthorEl.textContent = author;
+      quoteAuthorEl.hidden = !author || author === 'Unknown';
       quoteWidget.style.display = 'block';
     });
   }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Command Bar + Live Wallpaper",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Personal MV2 extension providing an Arc-style command bar overlay and a customizable live-wallpaper new-tab page with rotation, day/night scheduling, and weather/quote/focus widgets.",
   "icons": {
     "16": "icons/dot-ring-16.png",
@@ -20,20 +20,12 @@
   "background": {
     "scripts": [
       "background/background-icon.js",
-      "actions.js",
-      "shared/storage-keys.js",
-      "shared/storage-defaults.js",
+      "command-bar/command-bar-results.js",
+      "background/background-site-icons.js",
       "shared/storage.js",
-      "shared/storage-migrations.js",
-      "shared/url-utils.js",
       "shared/search-engines.js",
-      "shared/rotation.js",
-      "background/background-frecency.js",
-      "background/background-script-injection.js",
-      "background/background-tab-actions.js",
-      "background/background-suggestions.js",
+      "shared/storage-migrations.js",
       "background/background-dictionary.js",
-      "background/background-messaging.js",
       "background/background-bootstrap.js"
     ],
     "persistent": false
@@ -68,6 +60,7 @@
     "unlimitedStorage",
     "downloads",
     "activeTab",
-    "<all_urls>"
+    "<all_urls>",
+    "chrome://favicon/"
   ]
 }

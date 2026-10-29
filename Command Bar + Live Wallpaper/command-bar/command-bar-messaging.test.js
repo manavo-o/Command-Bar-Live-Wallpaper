@@ -15,16 +15,16 @@ function pages(count) {
   }
   return {handlers,queue,get toggles(){return toggles;}};
 }
-test('visibility notifications terminate across multiple extension pages',()=>{
+test('unrelated notifications terminate across multiple extension pages',()=>{
   const p=pages(5);
   for(const active of [true,false]) {
-    p.queue.push({from:0,message:{action:'COMMAND_BAR_VISIBILITY',active}});
+    p.queue.push({from:0,message:{action:'UNRELATED_NOTIFICATION',active}});
     let deliveries=0;
     while(p.queue.length && deliveries<100) {
       const {from,message}=p.queue.shift();
       p.handlers.forEach((handler,i)=>{if(i!==from){handler(message,{},()=>{});deliveries++;}});
     }
-    assert.equal(p.queue.length,0,'visibility messages must not rebroadcast');
+    assert.equal(p.queue.length,0,'unrelated messages must not rebroadcast');
     assert.equal(deliveries,4);
   }
   assert.equal(p.toggles,0);

@@ -1,13 +1,6 @@
 :root {
   --ui-accent: #0a84ff;
-  --ui-accent-strong: #0071e3;
-  --ui-success: #30d158;
-  --ui-danger: #ff453a;
-  --ui-radius-sm: 10px;
-  --ui-radius-md: 16px;
-  --ui-radius-lg: 24px;
   --ui-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
-  --ui-ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ui-shadow-float: 0 18px 50px rgba(0, 0, 0, 0.22), 0 2px 10px rgba(0, 0, 0, 0.12);
 }
 

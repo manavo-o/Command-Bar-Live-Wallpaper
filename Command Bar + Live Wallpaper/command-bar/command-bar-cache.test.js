@@ -21,7 +21,7 @@ test('closing invalidates outstanding results and releases session caches', () =
     clearTimeout(){}, safeSendMessage(){}, backdrop:{classList:{remove(){},add(){}}, setAttribute(){}}, input:{value:'query'},
     frame: { style: {}, setAttribute() {}, removeAttribute() {} }, shadow:{activeElement:null}, exitCleanupTimer:null, stylesReady:true,
     window:{addEventListener(){},matchMedia:()=>({matches:false})}, setTimeout(){return 3;}, finishExit(){}, animateOverlay(){},
-    clearAutocomplete(){},clearResultNodes(){}, resetSessionCaches(){released=true;} });
+    cancelResultMotion(){},clearAutocomplete(){},clearResultNodes(){}, resetSessionCaches(){released=true;} });
   vm.runInContext(source.slice(source.indexOf('  function hideOverlay'),source.indexOf('  function resetSessionCaches'))+'\nhideOverlay();',context);
   assert.equal(context.currentQueryToken,6); assert.equal(context.isVisible,false); assert.equal(released,true);
 });
