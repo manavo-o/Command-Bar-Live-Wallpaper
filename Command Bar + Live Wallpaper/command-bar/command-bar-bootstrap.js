@@ -66,7 +66,7 @@
       .input-field::placeholder{font-size:22px;color:#ffffff70;}
       .input-wrapper{position:relative;}
       .caret-mirror{position:absolute;visibility:hidden;white-space:pre;pointer-events:none;}
-      .caret-aura{position:absolute;width:2px;background:#f8fbff;box-shadow:0 0 5px 2px #e2f4ff,0 0 13px 4px #b4dbffb3;pointer-events:none;}
+      .caret-aura{position:absolute;width:2px;background:#f8fbff;box-shadow:0 0 2px .5px #e2f4ffcc,0 0 4px 0 #b4dbff80;pointer-events:none;}
       .caret-aura[hidden],.results-panel[hidden]{display:none;}
       .ai-submit{flex-shrink:0;width:36px;height:36px;margin-left:16px;border:1px solid #ffffff50;border-radius:50%;background:#ffffff15;color:inherit;}
       .ai-submit svg{width:23px;height:23px;}
