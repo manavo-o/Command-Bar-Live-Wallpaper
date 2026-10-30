@@ -45,6 +45,25 @@
   let rotationRemaining = null;
   let wallpaperResolveGeneration = 0;
   const isInactive = () => document.hidden || pageSuspended;
+  const widgetContentAnimations = new Map();
+  const widgetMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function stopWidgetContentMotion() {
+    widgetContentAnimations.forEach(animation => animation.cancel()); widgetContentAnimations.clear();
+  }
+  function animateWidgetContent(element) {
+    const node = element.querySelector('.widget-content') || element;
+    const previous = widgetContentAnimations.get(node);
+    if (previous) { previous.cancel(); widgetContentAnimations.delete(node); }
+    if (isInactive() || widgetMotionPreference.matches || !node.animate) return;
+    try {
+      const animation = node.animate([{opacity:.4},{opacity:1}],{duration:200,easing:'ease-out'});
+      widgetContentAnimations.set(node,animation);
+      animation.finished.then(() => { if (widgetContentAnimations.get(node) === animation) { animation.cancel(); widgetContentAnimations.delete(node); } }, () => {});
+    } catch (_) { /* Content is already readable at its final state. */ }
+  }
+  const updateWidgetMotionPreference = () => { if (widgetMotionPreference.matches) stopWidgetContentMotion(); };
+  if (widgetMotionPreference.addEventListener) widgetMotionPreference.addEventListener('change',updateWidgetMotionPreference);
+  window.addEventListener('unload',() => { stopWidgetContentMotion(); if (widgetMotionPreference.removeEventListener) widgetMotionPreference.removeEventListener('change',updateWidgetMotionPreference); });
   const pageSettings = {
     showWidgetClock: true, showWidgetDate: true, use24Hour: false,
     focusWorkMinutes: 25, focusBreakMinutes: 5, focusTimerState: null,
@@ -349,6 +368,7 @@
   resolveActiveWallpaper();
 
   function pausePage() {
+    stopWidgetContentMotion();
     mediaGeneration++;
     wallpaperResolveGeneration++;
     pendingWallpaperId = null;
@@ -440,6 +460,7 @@
 
         widgetsContainer.style.display = 'flex';
         const now = new Date();
+        if (window.WidgetCards) window.WidgetCards.updateClock(widgetsContainer, now, showWidgetClock);
         const next = new Date(now);
         if (showWidgetClock) next.setSeconds(60, 0); else next.setHours(24, 0, 0, 0);
         widgetClockInterval = setTimeout(updateWidgets, Math.max(1, next - now));
@@ -539,13 +560,15 @@
 
   function renderWeather(data, units) {
     if (!data || !data.current) {
-      weatherDescEl.textContent = 'Weather unavailable';
+      weatherDescEl.textContent = weatherWidget.dataset.cached === 'true' ? 'Saved weather · update unavailable' : 'Weather unavailable';
       return;
     }
+    const previousContent = weatherTempEl.textContent + weatherDescEl.textContent;
     const temp = Math.round(data.current.temperature_2m);
     weatherTempEl.textContent = `${temp}°${units === 'c' ? 'C' : 'F'}`;
     weatherDescEl.textContent = WMO_DESCRIPTIONS[data.current.weather_code] || 'Weather';
     weatherDescEl.title = '';
+    if (previousContent !== weatherTempEl.textContent + weatherDescEl.textContent) animateWidgetContent(weatherWidget);
     const icon = document.getElementById('weather-condition-icon');
     if (icon && icon.querySelector) {
       const code = Number(data.current.weather_code);
@@ -576,9 +599,10 @@
       timezone: 'auto'
     });
     fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: weatherController.signal })
-      .then((r) => r.json())
+      .then((r) => { if (r.ok === false) throw new Error('Weather request failed'); return r.json(); })
       .then((data) => {
         if (generation !== weatherGeneration || pageSuspended) return;
+        if (!data || !data.current || !Number.isFinite(data.current.temperature_2m)) throw new Error('Invalid weather');
         renderWeather(data, units);
         if (placeLabel) weatherPlaceEl.textContent = placeLabel;
 
@@ -596,7 +620,7 @@
         chrome.storage.local.set(update);
       })
       .catch((error) => {
-        if (generation === weatherGeneration && error.name !== 'AbortError') weatherDescEl.textContent = 'Weather unavailable';
+        if (generation === weatherGeneration && error.name !== 'AbortError') weatherDescEl.textContent = weatherWidget.dataset.cached === 'true' ? 'Saved weather · update unavailable' : 'Weather unavailable';
       })
       .finally(() => { if (generation === weatherGeneration) weatherRequestPending = false; });
   }
@@ -626,16 +650,19 @@
         }
         weatherWidget.style.display = 'block';
 
-        const cacheFresh = res.weatherCache && (Date.now() - res.weatherCache.fetchedAt) < 20 * 60 * 1000
-          && res.weatherCache.units === res.weatherUnits
+        const cacheMatches = res.weatherCache && res.weatherCache.data && res.weatherCache.units === res.weatherUnits
           && (res.weatherLocationMode !== 'manual' || (res.weatherCache.lat === res.weatherManualLat && res.weatherCache.lon === res.weatherManualLon))
           && res.weatherCache.locationMode === res.weatherLocationMode;
-        if (cacheFresh) {
+        const cacheFresh = cacheMatches && (Date.now() - res.weatherCache.fetchedAt) < 20 * 60 * 1000;
+        weatherWidget.dataset.cached = String(Boolean(cacheMatches));
+        if (cacheMatches) {
           renderWeather(res.weatherCache.data, res.weatherUnits);
-          weatherDescEl.title = 'Saved forecast · updates automatically';
+          weatherDescEl.title = cacheFresh ? 'Saved forecast · updates automatically' : 'Saved forecast · refreshing';
           if (res.weatherLocationMode === 'manual') weatherPlaceEl.textContent = res.weatherManualLabel || '';
-          return;
+        } else {
+          weatherTempEl.textContent = '--°'; weatherDescEl.textContent = 'Loading weather…'; weatherPlaceEl.textContent = '';
         }
+        if (cacheFresh) return;
 
         if (res.weatherLocationMode === 'manual') {
           if (res.weatherManualLat != null && res.weatherManualLon != null) {
@@ -647,14 +674,14 @@
         }
 
         if (!navigator.geolocation) {
-          weatherDescEl.textContent = 'Location unavailable';
+          weatherDescEl.textContent = cacheMatches ? 'Saved weather · location unavailable' : 'Location unavailable';
           return;
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => { if (generation === weatherInitGeneration && !pageSuspended) fetchWeather(pos.coords.latitude, pos.coords.longitude, res.weatherUnits, ''); },
           () => {
             if (generation !== weatherInitGeneration || pageSuspended) return;
-            if (!cacheFresh) weatherDescEl.textContent = 'Location permission denied';
+            weatherDescEl.textContent = cacheMatches ? 'Saved weather · location unavailable' : 'Location permission denied';
           },
           { maximumAge: 15 * 60 * 1000, timeout: 8000 }
         );
@@ -685,11 +712,13 @@
         quoteWidget.style.display = 'none';
         return;
       }
+      const previousQuote = quoteTextEl.textContent;
       const [text, author] = QUOTES[Math.floor(Math.random() * QUOTES.length)];
       quoteTextEl.textContent = `\u201c${text}\u201d`;
       quoteAuthorEl.textContent = author;
       quoteAuthorEl.hidden = !author || author === 'Unknown';
       quoteWidget.style.display = 'block';
+      if (previousQuote !== quoteTextEl.textContent) animateWidgetContent(quoteWidget);
     });
   }
   initQuoteWidget();
@@ -707,25 +736,32 @@
     return `${mins}:${secs}`;
   }
 
+  let focusActionPending = false;
+  const focusStatus = document.createElement('span');
+  focusStatus.className = 'widget-feedback'; focusStatus.setAttribute('role','status'); focusWidget.appendChild(focusStatus);
+  function timerAction(action, expectedEnd) {
+    if (focusActionPending) return;
+    focusActionPending = true; focusBtnToggle.disabled = focusBtnReset.disabled = true;
+    chrome.runtime.sendMessage({type:'FOCUS_TIMER_ACTION',action,expectedEnd},response => {
+      focusActionPending = false; focusBtnToggle.disabled = focusBtnReset.disabled = false;
+      if (chrome.runtime.lastError || !response || !response.ok) { focusStatus.textContent = 'Timer could not be saved. Try again.'; return; }
+      focusStatus.textContent = '';
+      pageSettings.focusTimerState = response.state;
+      restartFocusTick();
+    });
+  }
   function renderFocusTick(state, workMinutes, breakMinutes) {
     if (isInactive()) return;
-    if (!state || !state.endTimestamp) {
-      focusModeLabel.textContent = 'Focus';
-      focusTimeEl.textContent = formatMMSS(workMinutes * 60 * 1000);
-      focusBtnToggle.textContent = 'Start';
-      return;
-    }
-    const remaining = state.endTimestamp - Date.now();
-    if (remaining <= 0) {
-      const nextMode = state.mode === 'work' ? 'break' : 'work';
-      const nextDurationMs = (nextMode === 'work' ? workMinutes : breakMinutes) * 60 * 1000;
-      const nextState = { mode: nextMode, endTimestamp: Date.now() + nextDurationMs };
-      chrome.storage.local.set({ focusTimerState: nextState });
-      return;
-    }
-    focusModeLabel.textContent = state.mode === 'work' ? 'Focus' : 'Break';
+    const normalized = window.FocusTimer.normalize(state,workMinutes,breakMinutes);
+    const duration = normalized ? normalized.durationMs : workMinutes * 60000;
+    const remaining = normalized ? normalized.endTimestamp ? Math.max(0,normalized.endTimestamp-Date.now()) : normalized.remainingMs : duration;
+    focusModeLabel.textContent = normalized && normalized.mode === 'break' ? 'Break' : 'Focus';
     focusTimeEl.textContent = formatMMSS(remaining);
-    focusBtnToggle.textContent = 'Pause';
+    focusBtnToggle.textContent = !normalized ? 'Start' : normalized.endTimestamp ? 'Pause' : 'Resume';
+    focusWidget.style.setProperty('--focus-progress', String(Math.max(0,Math.min(1,1-remaining/duration))));
+    const progress = document.getElementById('focus-progress');
+    if (progress) progress.setAttribute('aria-label', `${Math.round(remaining/1000)} seconds remaining`);
+    if (normalized && normalized.endTimestamp && remaining <= 0) timerAction('advance',normalized.endTimestamp);
   }
 
   function restartFocusTick() {
@@ -756,24 +792,10 @@
   initFocusWidget();
 
   focusBtnToggle.addEventListener('click', () => {
-    chrome.storage.local.get(
-      { focusTimerState: null, focusWorkMinutes: 25 },
-      (res) => {
-        Object.assign(pageSettings, res || {});
-        if (res.focusTimerState && res.focusTimerState.endTimestamp) {
-          // Pause: convert remaining time into a fresh "not running" state.
-          chrome.storage.local.set({ focusTimerState: null });
-        } else {
-          const endTimestamp = Date.now() + res.focusWorkMinutes * 60 * 1000;
-          chrome.storage.local.set({ focusTimerState: { mode: 'work', endTimestamp } });
-        }
-      }
-    );
+    const state = window.FocusTimer.normalize(pageSettings.focusTimerState,pageSettings.focusWorkMinutes,pageSettings.focusBreakMinutes);
+    timerAction(!state ? 'start' : state.endTimestamp ? 'pause' : 'resume');
   });
-
-  focusBtnReset.addEventListener('click', () => {
-    chrome.storage.local.set({ focusTimerState: null });
-  });
+  focusBtnReset.addEventListener('click', () => timerAction('reset'));
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;

@@ -20,7 +20,7 @@ function harness(reduced = false) {
   const highlight = surface(); highlight.hidden = true;
   const row = top => ({ offsetTop: top, offsetLeft: 12, offsetWidth: 700, offsetHeight: 68,
     getAttribute() { return 'true'; } });
-  const ctx = vm.createContext({ resultAnimations: new Map(), hasRenderedResults: false, highlightReady: false,
+  const ctx = vm.createContext({ resultAnimations: new Map(), hasRenderedResults: false, highlightReady: false, lastPanelHeight: 0,
     isVisible: true, stylesReady: true, selectedIndex: 0, resultsPanel: panel, selectionHighlight: highlight,
     resultsList: { children: [row(12), row(80)], offsetTop: 0, offsetLeft: 0 },
     caretAura: { setActive() {}, dispose() {} },
@@ -32,7 +32,7 @@ function harness(reduced = false) {
   ctx.currentResults = [{key:'one'}, {key:'two'}];
   ctx.getItemKey = item => item.key;
   ctx.rowNodeMap = new Map(ctx.currentResults.map((item, index) => [item.key, ctx.resultsList.children[index]]));
-  vm.runInContext(source.slice(source.indexOf('  function stopResultAnimation('), source.indexOf("  resultsContainer.addEventListener('scroll'")), ctx);
+  vm.runInContext(source.slice(source.indexOf('  function stopResultAnimation('), source.indexOf("  resultsList.addEventListener('toggle'")), ctx);
   return { ctx, panel, highlight, animations, timers,
     async settle() { await new Promise(resolve => setImmediate(resolve)); } };
 }
@@ -45,7 +45,9 @@ test('selection retargets from its painted position and stale completion cannot 
   h.ctx.selectedIndex = 0; h.ctx.updateSelectionHighlight();
   const latest = h.animations[1];
   assert.equal(latest.frames[0].top, '42px'); assert.equal(latest.frames[0].height, '75px');
-  assert.equal(latest.frames[1].top, '12px'); assert.equal(old.cancelled, true);
+  assert.equal(latest.frames.at(-1).top, '12px'); assert.equal(old.cancelled, true);
+  assert.ok(parseFloat(latest.frames[1].height) > 68);
+  assert.equal(latest.frames.at(-1).height, '68px');
   await h.settle(); assert.equal(latest.cancelled, false);
   latest.complete(); await h.settle(); assert.equal(h.ctx.resultAnimations.size, 0); assert.equal(h.timers.size, 0);
 });
@@ -64,7 +66,7 @@ test('panel retargets interrupted height to new natural size without transformin
 test('navigation does not replay row fades and cleanup removes every effect and watchdog', async () => {
   const h = harness(); const row = { style: {}, animate: h.panel.animate };
   h.ctx.finishResultRender(200, [row]);
-  assert.equal(h.animations[0].options.duration, 100);
+  assert.equal(h.animations[0].options.duration, 160);
   h.ctx.finishResultRender(200, []); assert.equal(h.animations.length, 1);
   h.ctx.selectedIndex = 1; h.ctx.updateSelectionHighlight();
   h.panel.naturalHeight = 300; h.ctx.finishResultRender(200, []);
@@ -102,4 +104,35 @@ test('pagehide invokes result cleanup and resets decoration alongside entrance e
   h.ctx.pagehide({ persisted: true }); await h.settle();
   assert.equal(h.ctx.resultAnimations.size, 0); assert.equal(h.timers.size, 0);
   assert.equal(h.highlight.hidden, true); assert.equal(h.ctx.highlightReady, false);
+});
+
+test('repeated asynchronous paints preserve an in-flight selection glide to the same target', async () => {
+  const h = harness(); h.ctx.updateSelectionHighlight();
+  h.ctx.selectedIndex = 1; h.ctx.updateSelectionHighlight();
+  const active = h.animations.at(-1); h.highlight.painted = {top:'40px'};
+  h.ctx.updateSelectionHighlight(); h.ctx.updateSelectionHighlight();
+  assert.equal(h.animations.length,1); assert.equal(active.cancelled,false);
+  assert.equal(active.options.duration,240);
+  h.ctx.cancelResultMotion(true);await h.settle();
+});
+
+test('answer disclosure changes animate remembered panel height and remain tied to glass tracking', () => {
+  const h = harness(); h.ctx.finishResultRender(0,[]); h.panel.naturalHeight = 340;
+  h.ctx.decorations.track = duration => { h.ctx.tracked = duration; };
+  const callback = source.match(/onLayout: (\(\) => \{[^\n]+\})/)[1];
+  vm.runInContext('globalThis.disclosureChanged = '+callback,h.ctx);
+  h.ctx.disclosureChanged();
+  assert.equal(h.animations[0].frames[0].height,'200px');
+  assert.equal(h.animations[0].frames[1].height,'340px');
+  assert.equal(h.ctx.tracked,250);
+  h.ctx.cancelResultMotion(true);
+});
+
+test('enabling reduced motion cancels active result effects and settles the opening surface', async () => {
+  const h=harness();h.ctx.finishResultRender(0,[]);h.ctx.selectedIndex=1;h.ctx.updateSelectionHighlight();
+  h.ctx.window.matchMedia=()=>({matches:true});h.ctx.motionAnimations=[{}];h.ctx.motionGeneration=4;
+  let settled=0,synced=0;h.ctx.finishOpeningMotion=generation=>{assert.equal(generation,4);settled++;};h.ctx.decorations.sync=()=>synced++;
+  vm.runInContext(source.slice(source.indexOf('  const motionPreference ='),source.indexOf("  window.addEventListener('pagehide'")),h.ctx);
+  h.ctx.reduceActiveMotion();await h.settle();
+  assert.equal(h.ctx.resultAnimations.size,0);assert.equal(settled,1);assert.equal(synced,1);assert.equal(h.highlight.style.top,'80px');
 });

@@ -55,8 +55,8 @@
 .results-track { position: relative; isolation: isolate; }
 .selection-highlight {
   position: absolute; pointer-events: none; border-radius: 16px;
-  background: rgba(255,255,255,0.085);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045);
+  background: linear-gradient(115deg, rgba(255,255,255,0.11), rgba(255,255,255,0.055));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -1px 0 rgba(255,255,255,0.025);
 }
 .selection-highlight[hidden] { display: none; }
 .results-list { position: relative; width: 100%; margin: 0; padding: 12px; list-style: none; box-sizing: border-box; }
@@ -312,3 +312,11 @@
 
 @keyframes caret-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 @media(prefers-reduced-motion:reduce) { .caret-aura { animation: none; } }
+
+.overlay-backdrop { --ui-motion-fast: 120ms; --ui-motion-content: 200ms; --ui-motion-enter: 320ms; --ui-motion-exit: 160ms; }
+:is(.answer-results-toggle,.answer-copy,.ai-submit,.apple-dict-btn) { transition: background-color var(--ui-motion-fast) ease, border-color var(--ui-motion-fast) ease, scale var(--ui-motion-fast) cubic-bezier(.16,1,.3,1); }
+:is(.answer-results-toggle,.answer-copy,.ai-submit,.apple-dict-btn):active { scale: .975; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.answer-results-toggle,.answer-copy,.ai-submit,.apple-dict-btn) { transition: none; }
+  :is(.answer-results-toggle,.answer-copy,.ai-submit,.apple-dict-btn):active { scale: none; }
+}

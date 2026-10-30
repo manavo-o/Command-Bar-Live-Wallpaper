@@ -8,7 +8,7 @@ function harness(settings = {}) {
   let next = 1, blobs = [], revoked = [], media = [], fetches = [];
   function element() {
     const classes = new Set();
-    return { style: { setProperty() {} }, classList: { add: x => classes.add(x), remove: x => classes.delete(x) },
+    return { dataset: {}, setAttribute() {}, style: { setProperty() {} }, classList: { add: x => classes.add(x), remove: x => classes.delete(x) },
       classes, addEventListener() {}, closest() { return null; }, removeAttribute() {}, pause() { this.paused = true; },
       play() { this.paused = false; return Promise.resolve(); }, load() { this.released = true; },
       replaceChildren() { media = []; }, appendChild(el) { media.push(el); }, querySelector(tag) { return media.find(el => el.tag === tag); },
@@ -21,13 +21,17 @@ function harness(settings = {}) {
     addEventListener(name, fn) { (listeners[name] ||= []).push(fn); }, body: element() };
   const state = { wallpapers: [{ id: 'a', mimeType: 'video/mp4' }, { id: 'b', mimeType: 'image/png' }], activeWallpaperId: 'a', ...settings };
   const timer = (fn, ms, type) => { const id = next++; tasks.set(id, { fn, ms, type }); return id; };
-  const window = { innerWidth: 1000, innerHeight: 800, focus() {}, matchMedia: () => ({ matches: false }),
+  const window = { FocusTimer: require('../shared/focus-timer'), innerWidth: 1000, innerHeight: 800, focus() {}, matchMedia: () => ({ matches: false }),
     addEventListener(name, fn) { (listeners[name] ||= []).push(fn); }, removeEventListener() {} };
   const context = vm.createContext({ window, document, navigator: {}, Date, Math, URLSearchParams, AbortController,
     fetch(url, options) { return new Promise((resolve,reject) => fetches.push({url,options,resolve,reject})); },
     matchMedia: window.matchMedia, URL: { createObjectURL: () => `blob:${next++}`, revokeObjectURL: url => revoked.push(url) },
     WallpaperDB: { getWallpaperBlob(id) { return new Promise(resolve => blobs.push({ id, resolve })); } },
-    chrome: { runtime: {}, storage: { local: {
+    chrome: { runtime: {sendMessage(request,callback) {
+      const nextState = require('../shared/focus-timer').transition(state.focusTimerState,request.action,Date.now(),state.focusWorkMinutes,state.focusBreakMinutes,request.expectedEnd);
+      state.focusTimerState=nextState; storageListeners.forEach(fn=>fn({focusTimerState:{newValue:nextState}},'local'));
+      callback({ok:true,state:nextState});
+    }}, storage: { local: {
       get(keys, cb) { reads.push(() => cb(Array.isArray(keys) ? Object.fromEntries(keys.map(k => [k, state[k]])) : { ...keys, ...state })); },
       set(update) { Object.assign(state, update); storageListeners.forEach(fn => fn(Object.fromEntries(Object.entries(update).map(([k,v]) => [k, { newValue:v }])), 'local')); }
     }, onChanged: { addListener: fn => storageListeners.push(fn) } } },
@@ -129,8 +133,16 @@ test('weather honors a fresh matching cache and supersedes old requests', async 
   assert.equal(h.fetches[0].options.signal.aborted,true);
   h.fetches[0].resolve({json:()=>Promise.resolve({current:{temperature_2m:99,weather_code:0}})});
   for(let i=0;i<5;i++) await settle();
-  assert.equal(h.elements.get('weather-temp').textContent,'72°F');
+  assert.equal(h.elements.get('weather-temp').textContent,'--°'); // A different city must not retain the old reading.
   h.fetches[1].resolve({json:()=>Promise.resolve({current:{temperature_2m:65,weather_code:0}})});
   for(let i=0;i<5;i++) await settle();
   assert.equal(h.elements.get('weather-temp').textContent,'65°F');
+});
+
+test('a stale matching weather cache remains readable when its refresh fails',async()=>{
+  const h=harness({showWidgetWeather:true,weatherLocationMode:'manual',weatherManualLat:1,weatherManualLon:2,weatherUnits:'f',
+    weatherCache:{fetchedAt:Date.now()-30*60000,lat:1,lon:2,units:'f',locationMode:'manual',data:{current:{temperature_2m:72,weather_code:0}}}});
+  assert.equal(h.elements.get('weather-temp').textContent,'72°F');assert.equal(h.fetches.length,1);
+  h.fetches[0].reject(new Error('offline'));for(let i=0;i<5;i++) await settle();
+  assert.equal(h.elements.get('weather-temp').textContent,'72°F');assert.match(h.elements.get('weather-desc').textContent,/Saved weather/);
 });

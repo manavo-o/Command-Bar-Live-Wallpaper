@@ -477,6 +477,7 @@ function recordCommandUsage(query, target) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request && request.type === 'FOCUS_TIMER_ACTION') return BackgroundFocusTimer.handle(request, sendResponse);
   if (!request) return false;
   if (!request.type) return false;
 

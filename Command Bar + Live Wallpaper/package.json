@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test": "node --test",
-    "check": "node --check actions.js && node --check background/background-bootstrap.js && node --check newtab/newtab-bootstrap.js && node --check options/options-bootstrap.js && node --check command-bar/command-bar-bootstrap.js && node --check command-bar/ui/glass-coordinator.js && node --check command-bar/ui/caret-aura.js && node --check scripts/build-command-bar.js && node --check command-bar/command-bar-view.bundle.js",
+    "check": "node --check actions.js && node --check background/background-bootstrap.js && node --check newtab/newtab-bootstrap.js && node --check options/options-bootstrap.js && node --check command-bar/command-bar-bootstrap.js && node --check command-bar/ui/glass-coordinator.js && node --check command-bar/ui/caret-aura.js && node --check scripts/build-command-bar.js && node --check command-bar/command-bar-view.bundle.js && node --check shared/widget-layout.js && node --check shared/widget-cards.js && node --check shared/focus-timer.js && node --check background/background-focus-timer.js && node --check newtab/widget-dashboard.js",
     "build": "node scripts/build-command-bar.js",
     "watch": "node scripts/build-command-bar.js --watch"
   },

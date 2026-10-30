@@ -43,5 +43,5 @@
   storage.get = get;
   storage.set = set;
   storage.debounceWrite = debounceWrite;
-  storage.SCHEMA_VERSION = 6;
+  storage.SCHEMA_VERSION = 7;
 }(typeof self !== 'undefined' ? self : window));

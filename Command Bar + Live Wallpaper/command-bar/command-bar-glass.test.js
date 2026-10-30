@@ -28,13 +28,14 @@ function harness() {
   refs.inputWrapper.getBoundingClientRect = () => ({ left: 100, top: 40, width: 740, height: 80 });
   refs.resultsPanel.getBoundingClientRect = () => ({ left: 100, top: 132, width: 740, height: 300 });
   Object.defineProperties(refs.input, { offsetLeft: {value:28}, offsetHeight:{value:30}, clientWidth:{value:680} });
-  const win = { performance: { now: () => now }, requestAnimationFrame(fn) { frames.set(++sequence, fn); return sequence; },
+  const preference = new w.EventTarget(); preference.matches = false;
+  const win = { matchMedia: () => preference, performance: { now: () => now }, requestAnimationFrame(fn) { frames.set(++sequence, fn); return sequence; },
     cancelAnimationFrame(id) { frames.delete(id); }, addEventListener(name, fn) { listeners[name] = fn; }, removeEventListener(name) { delete listeners[name]; } };
   // insertBefore needs a real DOM anchor while the coordinator reads the proxy.
   const hostShadow = { insertBefore(node) { shadow.insertBefore(node, anchor); } };
   const decorations = createDecorations({ hostDocument: doc, hostShadow, frame: frameProxy, refs, window: win });
   function advance(time) { now = time; for (const [id, fn] of [...frames]) { frames.delete(id); fn(time); } }
-  return { dom, inner, refs, shadow, frames, decorations, advance, listeners, get connected() { return connected; } };
+  return { dom, inner, refs, shadow, frames, decorations, advance, listeners, preference, get connected() { return connected; } };
 }
 test('glass follows painted bounds, radius and combined opacity, then stops sampling after transitions', () => {
   const h = harness(); h.decorations.setActive(true); h.decorations.track(450);
@@ -72,8 +73,59 @@ test('empty AI results hide their glass surface; visibility changes pause the ri
   Object.defineProperty(h.dom.window.document, 'hidden', { value:true, configurable:true });
   h.dom.window.document.dispatchEvent(new h.dom.window.Event('visibilitychange'));
   assert.equal(h.refs.backdrop.dataset.pageHidden, 'true');
-  h.refs.resultsPanel.hidden = false; h.decorations.sync();
+  h.refs.resultsPanel.hidden = false;
+  Object.defineProperty(h.dom.window.document, 'hidden', {value:false, configurable:true});
+  h.dom.window.document.dispatchEvent(new h.dom.window.Event('visibilitychange'));
+  h.decorations.sync();
   assert.equal(h.shadow.querySelector('.glass-results').hidden, false);
   h.decorations.setActive(false); assert.equal(h.refs.backdrop.dataset.pageHidden, 'true');
+  h.decorations.dispose(); h.dom.window.close();
+});
+
+test('pointer reflections coalesce to the latest position, settle, and clear on exit', () => {
+  const h = harness(); h.decorations.setActive(true); h.advance(1);
+  const plate = h.shadow.querySelector('.glass-input');
+  for (const x of [150, 180, 200]) h.inner.dispatchEvent(new h.inner.MouseEvent('pointermove', { clientX:x, clientY:60 }));
+  assert.equal(h.frames.size, 1);
+  h.advance(20);
+  assert.equal(plate.style.getPropertyValue('--light-x'), '100px');
+  assert.equal(plate.style.getPropertyValue('--light-y'), '20px');
+  assert.equal(plate.dataset.lit, 'true'); assert.equal(h.frames.size, 0);
+  h.inner.dispatchEvent(new h.inner.MouseEvent('pointerout'));
+  assert.equal(plate.dataset.lit, undefined);
+  h.decorations.dispose();
+  h.inner.dispatchEvent(new h.inner.MouseEvent('pointermove', {clientX:200, clientY:60}));
+  assert.equal(h.frames.size, 0); h.dom.window.close();
+});
+test('visibility and accessibility changes immediately reset reflections and cancel hidden work', () => {
+  const h = harness(); h.decorations.setActive(true);
+  const plate = h.shadow.querySelector('.glass-input'), stage = h.shadow.querySelector('.glass-stage');
+  const move = () => h.inner.dispatchEvent(new h.inner.MouseEvent('pointermove', {clientX:200, clientY:60}));
+  move(); h.advance(20); assert.equal(plate.dataset.lit, 'true');
+  h.preference.matches = true; h.preference.dispatchEvent(new h.dom.window.Event('change'));
+  assert.equal(plate.dataset.lit, undefined); assert.equal(stage.dataset.reflections, 'false');
+  h.advance(30); move(); assert.equal(h.frames.size, 0);
+  h.preference.matches = false; h.preference.dispatchEvent(new h.dom.window.Event('change'));
+  move(); h.decorations.track(450);
+  Object.defineProperty(h.dom.window.document, 'hidden', {value:true, configurable:true});
+  h.dom.window.document.dispatchEvent(new h.dom.window.Event('visibilitychange'));
+  assert.equal(h.frames.size, 0); assert.equal(stage.dataset.reflections, 'false');
+  Object.defineProperty(h.dom.window.document, 'hidden', {value:false, configurable:true});
+  h.dom.window.document.dispatchEvent(new h.dom.window.Event('visibilitychange')); h.advance(50);
+  assert.equal(stage.dataset.reflections, 'true'); assert.equal(h.frames.size, 0);
+  move(); h.advance(60); assert.equal(plate.dataset.lit, 'true');
+  h.decorations.setActive(false); assert.equal(plate.dataset.lit, undefined);
+  h.decorations.dispose(); h.dom.window.close();
+});
+
+test('closing suppresses reflections while retaining geometry tracking for the exit', () => {
+  const h = harness(); h.decorations.setActive(true); h.advance(1);
+  h.decorations.stopReflections(); h.decorations.track(160);
+  h.inner.dispatchEvent(new h.inner.MouseEvent('pointermove', {clientX:200, clientY:60}));
+  h.advance(100);
+  assert.equal(h.shadow.querySelector('.glass-input').dataset.lit, undefined);
+  assert.equal(h.shadow.querySelector('.glass-stage').dataset.reflections, 'false');
+  assert.equal(h.connected, true);
+  h.advance(200); assert.equal(h.frames.size, 0);
   h.decorations.dispose(); h.dom.window.close();
 });

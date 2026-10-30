@@ -46,16 +46,18 @@
   }, true);
   const settingsSearch = document.getElementById('settings-search');
 
-  let selectedSection = 'library';
+  let selectedSection = 'wallpaper';
   function selectSection(section) {
-    selectedSection = section;
+    const legacy = {library:'wallpaper',effects:'wallpaper',rotation:'wallpaper'};
+    selectedSection = legacy[section] || section;
     const query = settingsSearch ? settingsSearch.value.trim().toLowerCase() : '';
     const matching = [];
     panes.forEach(pane => {
       const titleMatches = pane.querySelector('.pane-header').textContent.toLowerCase().includes(query);
       let hasMatch = !query || titleMatches;
       pane.querySelectorAll('.card').forEach(card => {
-        const match = !query || titleMatches || card.textContent.toLowerCase().includes(query);
+        const groupTitle = card.closest?.('.wallpaper-group')?.querySelector('summary')?.textContent || '';
+        const match = !query || titleMatches || (card.textContent + ' ' + groupTitle).toLowerCase().includes(query);
         card.dataset.filterHidden = String(!match);
         hasMatch ||= match;
       });
@@ -71,14 +73,50 @@
     });
     panes.forEach(pane => { pane.hidden = pane.id !== `pane-${selectedSection}`; });
     document.getElementById('settings-empty').hidden = matching.length > 0;
+    document.body.classList.toggle('settings-searching', Boolean(query));
+    document.querySelectorAll('.wallpaper-group').forEach(group => {
+      group.hidden = Boolean(query) && ![...group.querySelectorAll('.card')].some(card => card.dataset.filterHidden === 'false');
+      if (query) {
+        if (!group.dataset.searchOpen) group.dataset.searchOpen = group.open ? 'open' : 'closed';
+        group.open = true;
+      } else if (group.dataset.searchOpen) {
+        group.open = group.dataset.searchOpen === 'open'; delete group.dataset.searchOpen;
+      }
+    });
+    if (legacy[section] && !query) {
+      const group = document.getElementById('wallpaper-' + section);
+      if (group) { group.open = true; group.scrollIntoView?.({block:'start'}); }
+    }
+
   }
-  navItems.forEach(button => button.addEventListener('click', () => selectSection(button.dataset.section)));
+  navItems.forEach(button => button.addEventListener('click', () => {
+    selectSection(button.dataset.section); animatePane();
+  }));
+  let paneAnimation = null;
+  function stopPaneMotion() { if (paneAnimation) paneAnimation.cancel(); paneAnimation = null; }
+  function animatePane() {
+    stopPaneMotion();
+    const pane = document.getElementById('pane-' + selectedSection);
+    if (!pane || !pane.animate || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    paneAnimation = pane.animate([{opacity:0,translate:'0 4px'},{opacity:1,translate:'0 0'}],{duration:200,easing:'cubic-bezier(.16,1,.3,1)'});
+    const active = paneAnimation;
+    active.finished.then(() => { if (paneAnimation === active) stopPaneMotion(); }, () => {});
+  }
+  window.addEventListener('pagehide',stopPaneMotion);
+  document.addEventListener('visibilitychange',() => { if (document.hidden) stopPaneMotion(); });
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  motionPreference.addEventListener('change',() => { if (motionPreference.matches) stopPaneMotion(); });
+  selectSection('wallpaper');
   if (settingsSearch) settingsSearch.addEventListener('input', () => selectSection(selectedSection));
 
   document.getElementById('input-day-hour').setAttribute('aria-label', 'Day starts at hour');
   document.getElementById('input-night-hour').setAttribute('aria-label', 'Night starts at hour');
-  const linkedSection = window.location.hash.slice(1);
-  if (Array.from(navItems).some(item => item.dataset.section === linkedSection)) selectSection(linkedSection);
+  function followHash() {
+    const linkedSection = window.location.hash.slice(1);
+    if (['library','effects','rotation'].includes(linkedSection) || Array.from(navItems).some(item => item.dataset.section === linkedSection)) selectSection(linkedSection);
+  }
+  followHash();
+  window.addEventListener('hashchange', followHash);
 
   // Keep the native controls, but give every control an explicit accessible label.
   document.querySelectorAll('.setting-row').forEach((row, index) => {
@@ -99,23 +137,87 @@
     control.syncOutput = update;
     update();
   });
-  function syncDashboardPreview() {
-    const toggles = { clock: 'toggle-widget-clock', date: 'toggle-widget-date', weather: 'toggle-widget-weather', focus: 'toggle-widget-focus', quote: 'toggle-widget-quote' };
-    let count = 0;
-    Object.entries(toggles).forEach(([name, id]) => {
-      const enabled = document.getElementById(id).checked;
-      document.querySelector(`[data-preview="${name}"]`).hidden = !enabled;
-      if (enabled) count++;
+  let previewUnits = 'f';
+  function syncWidgetDetails() {
+    [['toggle-widget-clock', 'toggle-24hour'], ['toggle-widget-weather', 'weather-location-segmented'], ['toggle-widget-focus', 'input-focus-work']].forEach(([toggle, field]) => {
+      const control = document.getElementById(field);
+      const card = control.closest('.card');
+      card.querySelectorAll('.setting-row').forEach((row, index) => {
+        if ((toggle === 'toggle-widget-clock' && row.contains(control)) || (toggle !== 'toggle-widget-clock' && index > 0)) row.dataset.dependentHidden = String(!document.getElementById(toggle).checked);
+      });
     });
-    const preview = document.querySelector('.dashboard-preview');
-    preview.classList.toggle('is-empty', count === 0);
-    preview.querySelector('.preview-tiles').hidden = !document.getElementById('toggle-widget-weather').checked && !document.getElementById('toggle-widget-focus').checked;
-    document.querySelector('[data-preview="focus"] strong').textContent = (document.getElementById('input-focus-work').value || '25') + ':00';
+  }
+  let widgetAppearance = window.WidgetCards.sanitizeAppearance(null);
+  let appearanceRevision = 0;
+  const appearanceControls = [];
+  const widgetToggleIds = {clock:'toggle-widget-clock',weather:'toggle-widget-weather',focus:'toggle-widget-focus',quote:'toggle-widget-quote'};
+  const miniatures = {clock:['9:41','9:41','◷','9:41 · Mon'],weather:['☀ 72°','72°','☀','☀ 72° · Clear'],focus:['◴','25:00','━━━━','25:00 ▶'],quote:['“ Make room','Make room','“ Aa','Make room…']};
+  Object.keys(window.WidgetCards.variants).forEach(kind => {
+    const section = document.getElementById(widgetToggleIds[kind]).closest('.card');
+    const fieldset = document.createElement('fieldset'); fieldset.className = 'widget-appearance';
+    const legend = document.createElement('legend'); legend.textContent = 'Appearance'; fieldset.appendChild(legend);
+    const gallery = document.createElement('div'); gallery.className = 'variant-gallery'; gallery.setAttribute('role','group'); gallery.setAttribute('aria-label',kind+' design');
+    Object.entries(window.WidgetCards.variants[kind]).forEach(([value,label],index) => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'variant-option';
+      button.dataset.kind = kind; button.dataset.variant = value;
+      const sample = document.createElement('span'); sample.className = 'variant-miniature'; sample.setAttribute('aria-hidden','true'); sample.textContent = miniatures[kind][index];
+      const caption = document.createElement('span'); caption.textContent = label; button.append(sample,caption);
+      button.addEventListener('click',() => updateWidgetAppearance(kind,'variant',value)); gallery.appendChild(button);
+      appearanceControls.push({kind,key:'variant',value,control:button});
+    });
+    fieldset.appendChild(gallery);
+    const row = document.createElement('div'); row.className = 'appearance-selects';
+    Object.entries(window.WidgetCards.choices).forEach(([key,values]) => {
+      const label = document.createElement('label'); label.textContent = key[0].toUpperCase()+key.slice(1);
+      const select = document.createElement('select'); select.id = kind+'-'+key; select.dataset.appearance = key;
+      Object.entries(values).forEach(([value,text]) => { const option = document.createElement('option'); option.value = value; option.textContent = text; select.appendChild(option); });
+      select.addEventListener('change',() => updateWidgetAppearance(kind,key,select.value));
+      label.appendChild(select); row.appendChild(label); appearanceControls.push({kind,key,control:select});
+    });
+    fieldset.appendChild(row); section.appendChild(fieldset);
+  });
+  function syncAppearanceControls() {
+    appearanceControls.forEach(({kind,key,value,control}) => {
+      if (key === 'variant') control.setAttribute('aria-pressed',String(widgetAppearance[kind].variant === value));
+      else control.value = widgetAppearance[kind][key];
+    });
+    window.WidgetCards.applyAppearance(document,widgetAppearance);
+  }
+  function updateWidgetAppearance(kind,key,value) {
+    widgetAppearance = window.WidgetCards.sanitizeAppearance({...widgetAppearance,[kind]:{...widgetAppearance[kind],[key]:value}});
+    appearanceRevision++; syncAppearanceControls();
+    saveSettings({widgetAppearance});
+  }
+  syncAppearanceControls();
+  function syncDashboardPreview() {
+    const preview = document.querySelector('[data-widget-preview]');
+    const role = name => preview.querySelector('[data-role="' + name + '"]');
+    const enabled = id => document.getElementById(id).checked;
+    const showClock = enabled('toggle-widget-clock'), showDate = enabled('toggle-widget-date');
+    preview.querySelector('[data-preview="clock"]').hidden = !showClock && !showDate;
+    role('widget-clock').hidden = !showClock;
+    role('widget-clock').textContent = enabled('toggle-24hour') ? '21:41' : '9:41 PM';
+    role('widget-date').hidden = !showDate;
+    role('widget-date').textContent = new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+    [['weather','toggle-widget-weather'],['focus','toggle-widget-focus'],['quote','toggle-widget-quote']].forEach(([kind,id]) => { preview.querySelector('[data-preview="'+kind+'"]').hidden = !enabled(id); });
+    role('weather-temp').textContent = previewUnits === 'c' ? '22°C' : '72°F';
+    role('weather-desc').textContent = 'Clear sky · sample weather';
+    role('weather-place').textContent = 'Sample location';
+    role('focus-time').textContent = (document.getElementById('input-focus-work').value || '25') + ':00';
+    role('quote-text').textContent = '“Make room for what matters.”';
+    role('quote-author').textContent = 'Sample quote';
+    preview.querySelector('.preview-empty').hidden = [...preview.querySelectorAll('[data-preview]')].some(card => !card.hidden);
+    window.WidgetCards.updateClock(preview.querySelector('[data-preview="clock"]'),new Date(2026,0,1,21,41),showClock);
+    syncWidgetDetails();
   }
   document.getElementById('pane-widgets').addEventListener('change', syncDashboardPreview);
+  document.getElementById('pane-widgets').addEventListener('input', syncDashboardPreview);
   document.getElementById('reset-dashboard-position').addEventListener('click', () => {
-    saveSettings({ dashboardPos: null }, () => {
-      document.getElementById('dashboard-settings-status').textContent = chrome.runtime.lastError ? 'Position could not be reset.' : 'Dashboard position reset.';
+    chrome.storage.local.get({widgetLayout:null,widgetLocks:null}, res => {
+      if (chrome.runtime.lastError) { announceSave(false); return; }
+      saveSettings({widgetLayout:window.WidgetLayout.resetUnlocked(res.widgetLayout,window.WidgetCards.sanitizeLocks(res.widgetLocks)),dashboardPos:null}, () => {
+        document.getElementById('dashboard-settings-status').textContent = chrome.runtime.lastError ? 'Layout could not be reset.' : 'Unlocked widget positions reset.';
+      });
     });
   });
 
@@ -382,8 +484,8 @@
   const inputNightHour = document.getElementById('input-night-hour');
 
   function showModeCards(mode) {
-    rotateSettingsCard.style.display = mode === 'rotate' ? 'block' : 'none';
-    scheduleSettingsCard.style.display = mode === 'schedule' ? 'block' : 'none';
+    rotateSettingsCard.dataset.dependentHidden = String(mode !== 'rotate');
+    scheduleSettingsCard.dataset.dependentHidden = String(mode !== 'schedule');
   }
 
   function setSegmentedActive(container, attr, value) {
@@ -477,6 +579,7 @@
     if (!seg) return;
     const units = seg.dataset.units;
     setSegmentedActive(weatherUnitsSegmented, 'units', units);
+    previewUnits = units; syncDashboardPreview();
     saveSettings({ weatherUnits: units });
   });
 
@@ -633,6 +736,9 @@
     saveSettings({ searchRoutingMode: radio.value });
   }));
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.widgetAppearance) {
+      appearanceRevision++; widgetAppearance = window.WidgetCards.sanitizeAppearance(changes.widgetAppearance.newValue); syncAppearanceControls();
+    }
     if (area === 'local' && changes.searchRoutingMode) syncRoutingMode(changes.searchRoutingMode.newValue);
   });
   selectDensity.addEventListener('change', () => saveSettings({ commandBarDensity: selectDensity.value }));
@@ -697,6 +803,8 @@
     chrome.storage.local.get(null, (allData) => {
       const allowed = Object.values(window.CommandBarStorage.KEYS);
       const exportData = Object.fromEntries(Object.entries(allData).filter(([key]) => allowed.includes(key)));
+      exportData.widgetAppearance = window.WidgetCards.sanitizeAppearance(allData.widgetAppearance);
+      exportData.widgetLocks = window.WidgetCards.sanitizeLocks(allData.widgetLocks);
       exportData.customSearchEngines = window.CommandBarSearchEngines.sanitizeEngines(allData.customSearchEngines);
       ['tabFrecency', 'visitLog', 'historyIndex', 'weatherCache', 'actionUsage', 'commandBarUsage', 'siteIconCache'].forEach((key) => delete exportData[key]);
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
@@ -726,6 +834,12 @@
             Number.isFinite(safe.widgetPos.left) && Number.isFinite(safe.widgetPos.top)) {
           safe.dashboardPos = safe.widgetPos;
         }
+        if (window.WidgetLayout) {
+          if (Object.prototype.hasOwnProperty.call(parsed, 'widgetLayout')) safe.widgetLayout = window.WidgetLayout.sanitize(parsed.widgetLayout);
+          else if (Object.prototype.hasOwnProperty.call(safe, 'dashboardPos') || Object.prototype.hasOwnProperty.call(safe, 'widgetPos')) safe.widgetLayout = window.WidgetLayout.fromLegacy(safe.dashboardPos);
+        }
+        if (Object.hasOwn(safe,'widgetAppearance')) safe.widgetAppearance = window.WidgetCards.sanitizeAppearance(safe.widgetAppearance);
+        if (Object.hasOwn(safe,'widgetLocks')) safe.widgetLocks = window.WidgetCards.sanitizeLocks(safe.widgetLocks);
         delete safe.storageSchemaVersion;
         saveSettings(safe, () => {
           backupStatus.textContent = chrome.runtime.lastError ? 'Import failed.' : `Imported ${Object.keys(safe).length} settings. Reload to apply all changes.`;
@@ -750,9 +864,11 @@
   // ---------------------------------------------------------------------
   // Initial load — restore every stored setting into its control
   // ---------------------------------------------------------------------
+  const initialAppearanceRevision = appearanceRevision;
   chrome.storage.local.get(
     (window.CommandBarStorage && window.CommandBarStorage.DEFAULTS) || {},
     (res) => {
+      if (appearanceRevision === initialAppearanceRevision) { widgetAppearance = window.WidgetCards.sanitizeAppearance(res.widgetAppearance); syncAppearanceControls(); }
       toggleAllWindows.checked = Boolean(res.searchAllWindowsByDefault);
       inputResultLimit.value = res.commandBarResultLimit;
       toggleSuggestions.checked = Boolean(res.commandBarSuggestionsEnabled);
@@ -786,6 +902,7 @@
         inputWeatherCity.value = res.weatherManualLabel;
       }
       setSegmentedActive(weatherUnitsSegmented, 'units', res.weatherUnits);
+      previewUnits = res.weatherUnits;
 
       toggleWidgetQuote.checked = Boolean(res.showWidgetQuote);
       toggleWidgetFocus.checked = Boolean(res.showWidgetFocusTimer);
