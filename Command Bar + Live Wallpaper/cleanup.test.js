@@ -27,7 +27,7 @@ test('search facade exposes suggestion promotion and obsolete prefixes no longer
 test('profile import drops removed settings and sanitizes URL engines; export excludes private runtime caches', () => {
   const source = fs.readFileSync('options/options-bootstrap.js','utf8');
   const root = {};
-  for (const file of ['shared/storage-keys.js','shared/search-engines.js']) vm.runInNewContext(fs.readFileSync(file,'utf8'), { self: root, URL });
+  for (const file of ['shared/storage-keys.js','shared/search-engines.js','shared/widget-cards.js']) vm.runInNewContext(fs.readFileSync(file,'utf8'), { self: root, URL });
   const imported = { aiDefaultProvider:'old', customQuickLinks:[], wallpapers:[{id:'wall'}], actionFavorites:['new-tab'], widgetPos:{left:20,top:30}, customSearchEngines:[{id:'url',name:'Search',url:'https://example.com/?q=',isAi:true},{id:'api',name:'API',url:'https://example.com/',type:'api'}] };
   const ctx=vm.createContext({window:root,parsed:imported,allData:{...imported,siteIconCache:{},visitLog:{}},URL});
   const start=source.indexOf('        const allowed =');
@@ -38,4 +38,20 @@ test('profile import drops removed settings and sanitizes URL engines; export ex
   const exportStart=source.indexOf('      const allowed =');
   vm.runInContext('(function(){'+source.slice(exportStart,source.indexOf('      const dataStr',exportStart))+'globalThis.exported=exportData;})()',ctx);
   assert.equal(ctx.exported.siteIconCache,undefined); assert.equal(ctx.exported.visitLog,undefined); assert.equal(ctx.exported.aiDefaultProvider,undefined);
+});
+
+test('widget layouts survive profile export/import and invalid positions are sanitized',()=>{
+  const source=fs.readFileSync('options/options-bootstrap.js','utf8'),root={WidgetLayout:require('./shared/widget-layout')};
+  for(const file of ['shared/storage-keys.js','shared/search-engines.js','shared/widget-cards.js']) vm.runInNewContext(fs.readFileSync(file,'utf8'),{self:root,URL});
+  const layout={version:1,cards:{clock:{x:.2,y:.3},weather:{x:.7,y:.8}}};
+  const ctx=vm.createContext({window:root,allData:{widgetLayout:layout,storageSchemaVersion:7},URL});
+  const exportStart=source.indexOf('      const allowed =');
+  vm.runInContext('(function(){'+source.slice(exportStart,source.indexOf('      const dataStr',exportStart))+'globalThis.exported=exportData;})()',ctx);
+  ctx.parsed=JSON.parse(JSON.stringify(ctx.exported));
+  const start=source.indexOf('        const allowed =');
+  const run=()=>vm.runInContext('(function(){'+source.slice(start,source.indexOf('        saveSettings(safe',start))+'globalThis.result=safe;})()',ctx);
+  run();assert.deepEqual(JSON.parse(JSON.stringify(ctx.result.widgetLayout)),layout);
+  ctx.parsed={widgetLayout:{cards:{clock:{x:Infinity,y:0},quote:{x:2,y:-3},bad:{x:0,y:0}}}};run();
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.result.widgetLayout)),{version:1,cards:{quote:{x:1,y:0}}});
+  ctx.parsed={showWidgetQuote:true};run();assert.equal(Object.hasOwn(ctx.result,'widgetLayout'),false);
 });

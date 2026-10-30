@@ -5,6 +5,9 @@
     activeWallpaperId: null,
     widgetPos: null,
     dashboardPos: null,
+    widgetLayout: null,
+    widgetAppearance: {},
+    widgetLocks: {},
     focusTimerState: null,
     searchAllWindowsByDefault: false,
     commandBarUsage: {},
@@ -32,7 +35,7 @@
     showWidgetFocusTimer: false,
     focusWorkMinutes: 25,
     focusBreakMinutes: 5
-    ,storageSchemaVersion: 6
+    ,storageSchemaVersion: 7
     ,actionFavorites: []
     ,commandBarResultLimit: 6
     ,commandBarSuggestionsEnabled: true

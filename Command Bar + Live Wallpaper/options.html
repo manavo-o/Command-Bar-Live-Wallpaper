@@ -6,6 +6,7 @@
   <title>Command Bar & Live Wallpaper — Settings</title>
   <link rel="stylesheet" href="shared/design-tokens.css">
   <link rel="stylesheet" href="options.css">
+  <link rel="stylesheet" href="shared/widget-cards.css">
 </head>
 <body>
   <div class="app-shell">
@@ -15,17 +16,9 @@
         <div class="sidebar-title-sub">Command Bar & Live Wallpaper</div>
       </div>
       <label class="search-shell" for="settings-search"><span aria-hidden="true">⌕</span><input id="settings-search" class="settings-search" type="search" placeholder="Filter settings…" aria-label="Filter settings"></label>
-      <button class="nav-item active" data-section="library">
+      <button class="nav-item active" data-section="wallpaper">
         <span class="nav-icon" data-icon="library"></span>
-        <span>Wallpaper Library</span>
-      </button>
-      <button class="nav-item" data-section="effects">
-        <span class="nav-icon" data-icon="effects"></span>
-        <span>Playback & Effects</span>
-      </button>
-      <button class="nav-item" data-section="rotation">
-        <span class="nav-icon" data-icon="rotation"></span>
-        <span>Rotation & Schedule</span>
+        <span>Wallpaper</span>
       </button>
       <button class="nav-item" data-section="widgets">
         <span class="nav-icon" data-icon="widgets"></span>
@@ -47,12 +40,10 @@
 
     <main class="content">
       <p id="settings-empty" class="settings-empty" role="status" hidden>No settings match your search. Try a different word.</p>
-      <!-- Wallpaper Library -->
-      <section class="pane" id="pane-library">
-        <header class="pane-header">
-          <h1>Wallpaper Library</h1>
-          <p class="pane-sub">Upload media and choose what plays on your new tab page.</p>
-        </header>
+      <section class="pane" id="pane-wallpaper">
+        <header class="pane-header"><h1>Wallpaper</h1><p class="pane-sub">Your library, playback, and rotation in one place.</p></header>
+        <details class="wallpaper-group" id="wallpaper-library" open><summary>Library</summary>
+
 
           <section class="card hero-card">
           <div class="upload-area" id="upload-area">
@@ -63,14 +54,9 @@
           <div id="wallpaper-preview" class="wallpaper-preview" aria-label="Wallpaper preview"></div>
           <div id="wallpaper-list" class="wallpaper-list"></div>
         </section>
-      </section>
+        </details>
+        <details class="wallpaper-group" id="wallpaper-effects"><summary>Playback & Effects</summary>
 
-      <!-- Playback & Effects -->
-      <section class="pane" id="pane-effects" hidden>
-        <header class="pane-header">
-          <h1>Playback & Effects</h1>
-          <p class="pane-sub">Motion and image adjustments applied to whatever is playing.</p>
-        </header>
 
         <section class="card">
           <h2>Motion</h2>
@@ -127,14 +113,9 @@
             <input type="range" id="input-contrast" class="range-input" min="30" max="150" step="5" value="100">
           </div>
         </section>
-      </section>
+        </details>
+        <details class="wallpaper-group" id="wallpaper-rotation"><summary>Rotation & Schedule</summary>
 
-      <!-- Rotation & Schedule -->
-      <section class="pane" id="pane-rotation" hidden>
-        <header class="pane-header">
-          <h1>Rotation & Schedule</h1>
-          <p class="pane-sub">Choose how the active wallpaper is picked.</p>
-        </header>
 
         <section class="card">
           <h2>Mode</h2>
@@ -203,6 +184,7 @@
             </div>
           </div>
         </section>
+        </details>
       </section>
 
       <!-- Widgets -->
@@ -213,17 +195,14 @@
         </header>
 
         <section class="card dashboard-preview-card" aria-label="Dashboard preview">
-          <div class="dashboard-preview" aria-hidden="true">
-            <div class="preview-clock" data-preview="clock">9:41</div>
-            <div class="preview-date" data-preview="date">Thursday, October 15</div>
-            <div class="preview-tiles">
-              <div data-preview="weather"><span class="preview-symbol">☀</span><strong>72°</strong><small>Weather</small></div>
-              <div data-preview="focus"><strong>25:00</strong><small>Time to focus</small></div>
-            </div>
-            <p data-preview="quote">“Make room for what matters.”</p>
-            <span class="preview-empty">Enable a widget below to build your dashboard.</span>
+          <div class="dashboard-preview" data-widget-preview aria-label="Sample widget preview">
+            <section data-widget-card="clock" data-preview="clock"></section>
+            <section data-widget-card="weather" data-preview="weather"></section>
+            <section data-widget-card="focus" data-preview="focus"></section>
+            <section data-widget-card="quote" data-preview="quote"></section>
+            <p class="preview-empty" hidden>Enable a widget below to build your dashboard.</p>
           </div>
-          <div class="preview-caption"><div><h2>Your dashboard</h2><p class="hint">Move it by its handle on a new tab. Use arrow keys for precise placement.</p></div><button id="reset-dashboard-position" class="btn secondary-btn" type="button">Reset Position</button></div>
+          <div class="preview-caption"><div><h2>Your widgets</h2><p class="hint">Choose a design below. Arrange and lock positions on a new tab.</p></div><div class="preview-actions"><a class="btn primary-btn" href="newtab.html#edit-layout" target="_blank" rel="noopener">Edit Layout on New Tab</a><button id="reset-dashboard-position" class="btn secondary-btn" type="button">Reset Layout</button></div></div>
           <p id="dashboard-settings-status" class="status-msg" role="status"></p>
         </section>
         <div class="widget-settings-grid">
@@ -470,9 +449,11 @@
   <script src="shared/storage-defaults.js"></script>
   <script src="shared/storage.js"></script>
   <script src="shared/search-engines.js"></script>
+  <script src="shared/widget-layout.js"></script>
   <script src="shared/storage-migrations.js"></script>
   <script src="shared/ui-feedback.js"></script>
   <script src="db.js"></script>
+  <script src="shared/widget-cards.js"></script>
   <script src="options/options-bootstrap.js"></script>
 </body>
 </html>

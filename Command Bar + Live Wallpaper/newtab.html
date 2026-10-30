@@ -7,46 +7,29 @@
   <!-- Styles moved to newtab/newtab.css; keep this page MV2-compatible. -->
   <link rel="stylesheet" href="shared/design-tokens.css">
   <link rel="stylesheet" href="newtab/newtab.css">
+  <link rel="stylesheet" href="shared/widget-cards.css">
 </head>
 <body>
   <div id="media-root" class="media-container"></div>
   <div class="contrast-scrim" aria-hidden="true"></div>
   <canvas id="fx-canvas" class="fx-canvas"></canvas>
 
-  <section id="widget-dashboard" class="widget-dashboard" aria-label="Your dashboard" hidden>
-    <div class="dashboard-toolbar">
-      <button id="dashboard-handle" class="dashboard-handle" type="button" aria-label="Move dashboard. Use arrow keys; Shift for larger steps. Enter saves; Escape cancels." aria-describedby="dashboard-move-status">
-        <svg viewBox="0 0 24 16" aria-hidden="true"><path d="M4 5h16M4 11h16"/></svg><span>Dashboard</span>
-      </button>
-      <a class="dashboard-settings" href="options.html#widgets" aria-label="Customize widgets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/></svg></a>
+  <div class="layout-toolbar" aria-label="Widget layout" hidden>
+    <div id="layout-edit-controls" hidden>
+      <button id="layout-done" type="button">Done</button>
+      <button id="layout-cancel" type="button">Cancel</button>
+      <button id="layout-reset" type="button">Reset</button>
     </div>
-    <div id="widgets-container" class="widgets-container" style="display: none;">
-      <div id="widget-clock" class="widget-clock"></div>
-      <div id="widget-date" class="widget-date"></div>
-    </div>
-    <div class="dashboard-grid">
-      <div id="widget-weather" class="glass-card widget-surface" aria-label="Weather">
-        <div class="widget-eyebrow">Outside</div>
-        <div class="weather-reading"><svg id="weather-condition-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6L7 7m10 10 1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0"/></svg><div class="weather-temp" id="weather-temp">--°</div></div>
-        <div class="weather-desc" id="weather-desc" role="status">Loading weather…</div>
-        <div class="weather-place" id="weather-place"></div>
-      </div>
-      <div id="widget-focus" class="glass-card widget-surface" aria-label="Focus timer">
-        <div class="focus-mode-label widget-eyebrow" id="focus-mode-label">Focus</div>
-        <div class="focus-time" id="focus-time">25:00</div>
-        <div class="focus-controls">
-          <button class="focus-btn primary-focus" id="focus-btn-toggle" type="button">Start</button>
-          <button class="focus-btn" id="focus-btn-reset" type="button">Reset</button>
-        </div>
-      </div>
-      <div id="widget-quote" class="glass-card widget-surface" aria-label="Quote of the day">
-        <svg class="quote-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h6v8H2v-8c0-5 2-7 7-8v3c-3 1-5 2-5 5 M16 12h6v8h-8v-8c0-5 2-7 7-8v3c-3 1-5 2-5 5"/></svg>
-        <span id="quote-text">“…”</span>
-        <span class="quote-author" id="quote-author"></span>
-      </div>
-    </div>
-    <span id="dashboard-move-status" class="visually-hidden" role="status"></span>
+  </div>
+  <section id="widget-dashboard" class="widget-dashboard" aria-label="Your widgets" tabindex="-1" hidden>
+    <section id="widgets-container" data-widget-card="clock" aria-label="Clock and date"></section>
+    <section id="widget-weather" data-widget-card="weather" aria-label="Weather"></section>
+    <section id="widget-focus" data-widget-card="focus" aria-label="Focus timer"></section>
+    <section id="widget-quote" data-widget-card="quote" aria-label="Quote"></section>
   </section>
+  <div id="layout-guide-x" class="layout-guide vertical" hidden></div>
+  <div id="layout-guide-y" class="layout-guide horizontal" hidden></div>
+  <span id="dashboard-move-status" class="layout-status" role="status"></span>
 
   <div id="fallback-ui" class="fallback-msg" style="display: none;">
     <div class="fallback-icon" aria-hidden="true">✦</div>
@@ -56,11 +39,14 @@
 
   <script src="shared/storage.js"></script>
   <script src="shared/search-engines.js"></script>
+  <script src="shared/widget-layout.js"></script>
   <script src="shared/storage-migrations.js"></script>
   <script src="shared/ui-feedback.js"></script>
   <script src="shared/rotation.js"></script>
   <script src="db.js"></script>
+  <script src="shared/widget-cards.js"></script>
   <script src="newtab/widget-dashboard.js"></script>
+  <script src="shared/focus-timer.js"></script>
   <script src="newtab/newtab-bootstrap.js"></script>
   <script src="actions.js"></script>
   <script src="command-bar/fuzzy-search.js"></script>

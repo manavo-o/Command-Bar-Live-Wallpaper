@@ -144,3 +144,39 @@ Native IME, compact density, narrow/short viewports, browser zoom, operating-sys
 - Build, full automated suite, and syntax checks pass. Coverage includes inline AI submission, suggestion indices, stale replies, direct URL Enter routing, modifier precedence, caret editing/fallback/cleanup, and hidden result-glass lifecycle.
 - Live Helium review: reloaded the unpacked extension; verified inline AI button, missing AI row, suggestions and keyboard selection on the extension new-tab page. Clicking Ask AI opened a browser-default ChatGPT query. On an ordinary page, verified `gmail.com` displays Open and Enter navigates to Gmail rather than Google search. The stronger blinking-caret revision was loaded for this ordinary-page check.
 - Narrow/zoom layouts, native IME, OS accessibility settings, long-input scrolling, and performance benchmarks were not manually verified; automated lifecycle/fallback checks do not establish those results.
+
+## Independent widgets, settings consolidation, and motion — October 29, 2026
+
+### Implementation
+
+- Settings now have five sections: Wallpaper, Widgets, Command Bar, Backup, and About. Wallpaper uses Library, Playback & Effects, and Rotation & Schedule disclosures. Old library/effects/rotation links open their corresponding disclosure. Search opens matching disclosures and reveals dependent controls, then restores disclosure state when cleared.
+- The options preview and new-tab widgets share static markup and styles. Preview weather is explicitly sample data and makes no network requests. Visibility, time format, weather units, and focus duration update the preview. Secondary widget configuration is shown when relevant.
+- Clock/date, weather, focus, and quote are independent calm glass cards. Edit Layout exposes pointer/keyboard handles, alignment guides, Done, Cancel, and draft Reset. Placement uses an 8px grid and nearby edge/center alignment. Narrow viewports stack cards in a scrollable column without changing desktop positions. Saving failures keep the draft available for retry.
+- Storage schema 7 adds normalized per-card widgetLayout positions. Legacy dashboard placement is converted after measurement; card minimum heights reserve room while data loads. Existing normalized layouts are retained, explicit resets cannot resurrect legacy positions, and layouts participate in allowlisted profile import/export. Partial profiles without layout fields do not reset placement.
+- Timer mutations use one serialized background queue. Pause preserves remaining time and focus/break mode; Resume establishes a fresh deadline. Existing timestamp states remain readable. Duplicate expiration requests cannot advance the next session. The timer has a quiet progress ring, and weather retains a matching cached reading when refreshing fails.
+- Command-bar layout, typography, icons, controls, ordering, caret glow, and glass material are retained. Motion changes refine the bounded 320ms opening spring, use 160ms dismissal and 120ms selection movement, animate answer disclosures, and add brief existing-button press feedback. Repeated selection paints do not restart a glide. Enabling reduced motion cancels transient effects and settles surfaces.
+- New widget/settings animations are finite, respect reduced motion, and cancel on hiding or teardown. Glass has opaque accessibility/unsupported-browser fallbacks. No dependencies or extension permissions were added.
+
+### Automated verification
+
+- npm run build: passed.
+- npm test: 140 passing tests. Coverage includes independent layout draft/save/cancel/reset, snapping, keyboard/pointer cancellation, viewport changes, disabled widgets, late initial reads, measured migration, failed saving, lifecycle cleanup, schema migration/retry, profile round trips, preview behavior, dependent settings/search, timer pause/resume and competing background requests, cached-weather failure, disclosure expansion, repeated selection paints, and reduced-motion changes.
+- npm run check: passed; the command now includes the new layout, shared cards, timer, and background timer scripts.
+- Both HTML entry points were checked after shared-card rendering for unique IDs, required widget elements, and existing script/style resources. Entry-point dependency-order regression tests pass.
+
+### Live review and remaining checks
+
+Reloaded the installed unpacked extension in Helium and reviewed the five-section settings UI, shared sample preview, and independent widgets over the existing live wallpaper. Verified that Edit Layout on New Tab opens the editor, keyboard arrows move the focused card, and Escape exits while cancelling the draft.
+
+This live review found first-measurement crowding between weather and quote. The final source reserves card heights and delays legacy normalization until a render frame; automated coverage verifies delayed measurement. Those final sizing changes have not been rechecked in the live extension.
+
+Further direct extension-page access was rejected by the browser tool's URL policy. No attempt was made to bypass that restriction. Final live timer pause/reload/resume, pointer save/reset, narrow/zoom layouts, bright wallpaper, OS accessibility preferences, and ordinary-page command-bar checks remain outstanding. Reload the extension and refresh affected pages to load the final source. The live review and automated tests do not establish frame-time, CPU/GPU, or long-term memory results; use the measurement procedure above for those benchmarks.
+
+
+## Command-bar liquid motion — October 29, 2026
+
+- Added a finite neutral reflection sweep and pointer-following highlights to the host glass surfaces without changing their base colors or blur. Pointer updates coalesce into one frame; no new idle loop is used. Closing, pointer exit, blur, hidden pages, accessibility preference changes, and teardown reset reflections.
+- Refined the opening spring to 360ms with a 28ms results stagger, added temporary stretch to the 240ms selection glide, and added a 160ms fade-and-rise for inserted rows. Dismissal remains 160ms, and result height changes remain independent of entrance transforms.
+- `npm run build`, `npm test` (156 passing tests), and `npm run check` passed. Automated coverage includes reflection coalescing, hidden-page suspension, preference changes, exit suppression, cleanup, rapid selection retargeting, and interrupted opening/closing.
+- Reloaded the installed extension in Helium and checked command-bar opening on an ordinary page, typing, rapid arrow-key selection, calculator mode and return to search, and Escape dismissal. Settled surfaces retained their layout and dark palette.
+- Narrow viewports, dictionary disclosure/scrolling, OS accessibility settings, and visual timing of rapid opening reversals remain unverified manually. This smoke check does not establish frame-time, CPU/GPU, or long-term memory performance.

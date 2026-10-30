@@ -1,0 +1,112 @@
+.widget-clock { font-size: clamp(2.4rem, 5vw, 3rem); line-height: 1.05; font-weight: 500; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.clock-period { margin-left: .35em; font-size: .7rem; font-weight: 500; letter-spacing: .025em; color: #d4dce6; }
+.widget-date { margin-top: 7px; color: #d4dce6; font-size: .875rem; line-height: 1.5; }
+.widget-eyebrow { color: #c8d3e1; font: 550 .7rem/1.3 system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.weather-reading { display: flex; align-items: center; gap: 9px; margin-top: 0; }
+.weather-reading svg { width: 24px; height: 24px; fill: none; stroke: #e5d9ad; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.weather-temp, .focus-time { font-size: 1.65rem; font-weight: 500; line-height: 1.15; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.weather-desc { margin-top: 6px; color: #e1e7ef; font-size: .75rem; line-height: 1.45; }
+.weather-place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 4px; color: #bfcbd9; font-size: .7rem; line-height: 1.4; }
+.focus-time { margin-top: 12px; }
+.focus-controls { display: flex; gap: 6px; margin-top: 10px; }
+.focus-btn { flex: 1; min-height: 32px; padding: 6px 8px; color: #e6edf7; background: #ffffff0d; border: 1px solid #ffffff25; border-radius: 9px; cursor: pointer; font: 500 .75rem/1.3 system-ui, sans-serif; }
+.focus-btn:hover { background: #ffffff1f; }
+.primary-focus { color: #11233a; background: #d8e9ff; border-color: transparent; }
+.primary-focus:hover { background: #fff; }
+.quote-mark { display: none; }
+.quote-author { display: block; margin-top: 5px; color: #bdcadb; font-size: .7rem; }
+.widget-card { position: relative; width: 320px; max-width: 100%; padding: 24px; box-sizing: border-box; color: #fff; background: rgba(20,27,38,.55); border: 1px solid #ffffff24; border-radius: 22px; box-shadow: 0 8px 32px #0002; backdrop-filter: blur(24px) saturate(120%); -webkit-backdrop-filter: blur(24px) saturate(120%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.widget-clock-card { min-height: 138px; }
+.widget-weather-card { min-height: 164px; }
+.widget-focus-card { min-height: 270px; }
+.widget-clock-card .widget-content { display: flex; flex-direction: column; align-items: flex-start; }
+.widget-quote-card { min-height: 160px; font-size: .9rem; line-height: 1.65; }
+.widget-weather-card .weather-temp { font-size: 2rem; }
+.widget-weather-card .widget-eyebrow { margin-bottom: 10px; }
+.widget-card :is(button,a):focus-visible { outline: 3px solid #99c9ff; outline-offset: 3px; }
+.widget-card .quote-author { margin-top: 10px; font-size: .75rem; }
+.focus-dial { position: relative; width: 116px; height: 116px; display: grid; place-items: center; margin: 16px auto; }
+.focus-dial .focus-time { margin: 0; }
+.focus-progress { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke-width: 3; transform: rotate(-90deg); }
+.focus-track { stroke: #ffffff1c; }
+.focus-progress circle:last-child { stroke: #bedbff; stroke-dasharray: 1; stroke-dashoffset: var(--focus-progress, 0); stroke-linecap: round; transition: stroke-dashoffset 200ms linear; }
+.widget-card button { transition: background-color var(--ui-motion-fast,120ms) ease, transform var(--ui-motion-fast,120ms) ease; }
+.widget-card button:active { transform: scale(.975); }
+@supports not (backdrop-filter: blur(1px)) { .widget-card { background: #1b232f; } }
+@media (prefers-reduced-transparency: reduce) { .widget-card { background: #1b232f; backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@media (prefers-contrast: more) { .widget-card { background: #101722; border: 2px solid #fff; } .widget-card :is(.widget-eyebrow,.weather-desc,.weather-place,.quote-author) { color: #fff; } }
+@media (prefers-reduced-motion: reduce) { .widget-card, .widget-card *, .widget-card *::before, .widget-card *::after { animation: none !important; transition: none !important; } .widget-card button:active { transform: none; } }
+
+.widget-feedback { display: block; margin-top: 8px; color: #f5d9bd; font-size: .75rem; line-height: 1.5; }
+.widget-feedback:empty { display: none; }
+
+/* Layouts share live content nodes so changing a design preserves timer actions. */
+.widget-card { --widget-accent: #e2e8ef; --widget-width: 320px; --widget-text: 1; width: var(--widget-width); min-height: 0; padding: 24px; border-radius: 24px; overflow-wrap: anywhere; transition: background-color 160ms ease, border-color 160ms ease; }
+.widget-card[data-size="small"] { --widget-width: 248px; --widget-text: .85; padding: 18px; border-radius: 20px; }
+.widget-card[data-size="large"] { --widget-width: 400px; --widget-text: 1.22; padding: 30px; }
+.widget-card[data-accent="blue"] { --widget-accent: #bedbff; }
+.widget-card[data-accent="mint"] { --widget-accent: #b4ebd5; }
+.widget-card[data-accent="amber"] { --widget-accent: #f5d59c; }
+.widget-card[data-accent="rose"] { --widget-accent: #f0bed6; }
+.widget-card[data-material="solid"] { background: #1b232f; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.widget-card[data-material="none"] { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; text-shadow: 0 2px 12px #0008; }
+.widget-card .widget-clock { font-size: calc(3rem * var(--widget-text)); color: var(--widget-accent); }
+.widget-card .widget-date { font-size: calc(.875rem * var(--widget-text)); }
+.widget-card .weather-temp, .widget-card .focus-time { color: var(--widget-accent); font-size: calc(2rem * var(--widget-text)); }
+.widget-card .weather-reading svg { stroke: var(--widget-accent); }
+.widget-card .primary-focus { background: var(--widget-accent); color: #172030; text-shadow: none; }
+.widget-card .focus-progress circle:last-child { stroke: var(--widget-accent); }
+.widget-card .widget-content { width: 100%; min-width: 0; }
+.analog-clock { display: none; }
+.widget-clock-card[data-variant="centered"] { --widget-width: 480px; }
+.widget-clock-card[data-variant="centered"] .widget-content { align-items: center; text-align: center; }
+.widget-clock-card[data-variant="centered"] .widget-clock { font-size: calc(5rem * var(--widget-text)); font-weight: 300; letter-spacing: -.055em; }
+.widget-clock-card[data-variant="centered"] .widget-date { letter-spacing: .04em; }
+.widget-clock-card[data-variant="inline"] { --widget-width: 440px; }
+.widget-clock-card[data-variant="inline"] .widget-content { flex-direction: row; align-items: center; gap: 18px; }
+.widget-clock-card[data-variant="inline"] .widget-clock { font-size: calc(1.8rem * var(--widget-text)); white-space: nowrap; }
+.widget-clock-card[data-variant="inline"] .widget-date { margin: 0; max-width: 160px; }
+.widget-clock-card[data-variant="analog"] .widget-content { align-items: center; text-align: center; }
+.widget-clock-card[data-variant="analog"] .widget-clock { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.widget-clock-card[data-variant="analog"] .analog-clock { display: block; }
+.analog-clock { position: relative; width: calc(148px * var(--widget-text)); aspect-ratio: 1; border: 1px solid #ffffff30; border-radius: 50%; background: #ffffff08; margin-bottom: 12px; color: var(--widget-accent); }
+.dial-number { position: absolute; font-size: .7rem; line-height: 1; }
+.dial-12 { top: 9px; left: 50%; translate: -50% 0; } .dial-6 { bottom: 9px; left: 50%; translate: -50% 0; }
+.dial-3 { right: 9px; top: 50%; translate: 0 -50%; } .dial-9 { left: 9px; top: 50%; translate: 0 -50%; }
+.hour-hand,.minute-hand { position: absolute; left: calc(50% - 1.5px); bottom: 50%; width: 3px; border-radius: 4px; transform-origin: 50% 100%; background: var(--widget-accent); }
+.hour-hand { height: 26%; transform: rotate(var(--hour-angle,290deg)); } .minute-hand { height: 36%; width: 2px; left: calc(50% - 1px); transform: rotate(var(--minute-angle,246deg)); }
+.dial-pin { position: absolute; top: calc(50% - 4px); left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: var(--widget-accent); }
+.widget-weather-card[data-variant="text"] .weather-reading svg { display: none; }
+.widget-weather-card[data-variant="text"] .weather-temp { font-size: calc(3.4rem * var(--widget-text)); font-weight: 300; }
+.widget-weather-card[data-variant="icon"] .widget-content { text-align: center; }
+.widget-weather-card[data-variant="icon"] .weather-reading { flex-direction: column; gap: 12px; }
+.widget-weather-card[data-variant="icon"] .weather-reading svg { width: calc(64px * var(--widget-text)); height: calc(64px * var(--widget-text)); }
+.widget-weather-card[data-variant="icon"] .widget-eyebrow { display: none; }
+.widget-weather-card[data-variant="horizontal"] { --widget-width: 440px; }
+.widget-weather-card[data-variant="horizontal"] .widget-content { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; column-gap: 20px; }
+.widget-weather-card[data-variant="horizontal"] .widget-eyebrow { display: none; }
+.widget-weather-card[data-variant="horizontal"] .weather-reading { grid-row: 1 / 3; }
+.widget-weather-card[data-variant="horizontal"] .weather-desc { margin: 0; }
+.widget-focus-card .focus-dial { width: calc(116px * var(--widget-text)); height: calc(116px * var(--widget-text)); }
+.widget-focus-card[data-variant="digits"] .focus-progress,.widget-focus-card[data-variant="compact"] .focus-progress,.widget-focus-card[data-variant="bar"] .focus-progress { display: none; }
+.widget-focus-card[data-variant="digits"] .focus-dial { width: 100%; height: auto; margin: 18px auto; }
+.widget-focus-card[data-variant="digits"] .focus-time { font-size: calc(4rem * var(--widget-text)); font-weight: 300; }
+.widget-focus-card[data-variant="bar"] .focus-dial { width: 100%; height: auto; justify-items: start; margin: 18px 0 22px; }
+.widget-focus-card[data-variant="bar"] .focus-dial::after { content: ''; width: 100%; height: 5px; border-radius: 5px; margin-top: 16px; background: linear-gradient(to right,var(--widget-accent) calc((1 - var(--focus-progress,0)) * 100%),#ffffff24 0); }
+.widget-focus-card[data-variant="compact"] { --widget-width: 440px; }
+.widget-focus-card[data-variant="compact"] .widget-content { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.widget-focus-card[data-variant="compact"] .focus-dial { width: auto; height: auto; margin: 0; }
+.widget-focus-card[data-variant="compact"] .focus-controls { margin: 0; flex: 1; }
+.widget-quote-card { font-size: calc(.95rem * var(--widget-text)); }
+.widget-quote-card[data-variant="centered"] { --widget-width: 480px; text-align: center; font-size: calc(1.45rem * var(--widget-text)); font-weight: 300; line-height: 1.5; }
+.widget-quote-card[data-variant="editorial"] { font-family: Georgia, 'Times New Roman', serif; font-size: calc(1.4rem * var(--widget-text)); border-left: 2px solid var(--widget-accent); border-radius: 0; }
+.widget-quote-card[data-variant="editorial"] .quote-author { font-family: system-ui,sans-serif; }
+.widget-quote-card[data-variant="line"] { --widget-width: 480px; }
+.widget-quote-card[data-variant="line"]:not(.quote-expanded) #quote-text,.widget-quote-card[data-variant="line"]:not(.quote-expanded) [data-role="quote-text"] { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quote-expand { width: auto; margin-top: 12px; }
+.widget-card[data-size="small"]:is([data-variant="centered"],[data-variant="inline"],[data-variant="horizontal"],[data-variant="compact"],[data-variant="line"]) { --widget-width: 340px; }
+.widget-card[data-size="large"]:is([data-variant="centered"],[data-variant="inline"],[data-variant="horizontal"],[data-variant="compact"],[data-variant="line"]) { --widget-width: 560px; }
+.widget-card .widget-feedback { text-shadow: none; }
+@media (prefers-reduced-transparency: reduce) { .widget-card[data-material="glass"] { background: #1b232f; backdrop-filter: none; -webkit-backdrop-filter: none; } }
+@supports not (backdrop-filter: blur(1px)) { .widget-card[data-material="glass"] { background: #1b232f; } }
+@media (prefers-contrast: more) { .widget-card[data-material] { background: #101722; border: 2px solid #fff; text-shadow: none; } }

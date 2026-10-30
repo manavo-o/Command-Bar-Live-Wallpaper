@@ -2,7 +2,7 @@
   const storage = root.CommandBarStorage;
   if (!storage || typeof chrome === 'undefined' || !chrome.storage) return;
   const obsolete = ['aiDefaultProvider', 'aiRoutingEnabled', 'questionDetectionEnabled', 'preferredSearchEngine', 'customQuickLinks'];
-  storage.get({ storageSchemaVersion: 0, customSearchEngines: [], searchRoutingMode: 'balanced', disabledActions: [], actionFavorites: [], widgetPos: null, dashboardPos: null }, res => {
+  storage.get({ storageSchemaVersion: 0, customSearchEngines: [], searchRoutingMode: 'balanced', disabledActions: [], actionFavorites: [], widgetPos: null, dashboardPos: null, widgetLayout: null }, res => {
     if (!res || res.__error) return;
     const current = Number(res.storageSchemaVersion) || 0;
     if (current >= storage.SCHEMA_VERSION) return;
@@ -14,6 +14,7 @@
       actionFavorites: Array.isArray(res.actionFavorites) ? res.actionFavorites : [],
       customSearchEngines: root.CommandBarSearchEngines.sanitizeEngines(res.customSearchEngines)
     };
+    if (current < 7 && root.WidgetLayout) values.widgetLayout = root.WidgetLayout.sanitize(res.widgetLayout) || root.WidgetLayout.fromLegacy(values.dashboardPos);
     storage.set(values, ok => {
       if (!ok) return;
       chrome.storage.local.remove(obsolete, () => {

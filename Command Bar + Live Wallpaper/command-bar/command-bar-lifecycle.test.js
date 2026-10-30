@@ -86,8 +86,8 @@ test('spring starts at captured state on reversal and settles exactly', () => {
 });
 test('fresh opening staggers surfaces and reduced motion creates no animations', () => {
   const h = harness(); h.ctx.animateOverlay(true);
-  assert.equal(h.animations[1].options.duration, 320);
-  assert.equal(h.animations[2].options.delay, 16);
+  assert.equal(h.animations[1].options.duration, 360);
+  assert.equal(h.animations[2].options.delay, 28);
   const reduced = harness(true); reduced.ctx.animateOverlay(true);
   assert.equal(reduced.animations.length, 0);
 });

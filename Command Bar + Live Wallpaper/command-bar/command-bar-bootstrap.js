@@ -91,12 +91,13 @@
   styleLoadTimer = setTimeout(() => { if (!stylesReady) finishStyleLoading(true); }, 1500);
   shadow.appendChild(linkTag);
 
+  let lastPanelHeight = 0;
   const view = window.CommandBarView.mount(shadow, {
     key: item => getItemKey(item),
     positions: (query, text) => window.OverlaySearch?.fuzzyMatchPositions(query, text),
     icon: item => resolvedIcons.get(getItemKey(item)) || (/^(https?:|data:image\/)/i.test(item.icon || '') ? item.icon : '') || fallbackIcon(item.type),
     fallback: type => fallbackIcon(type),
-    onLayout: () => { updateSelectionHighlight(false); decorations.track(250); },
+    onLayout: () => { if (hasRenderedResults) finishResultRender(lastPanelHeight, []); updateSelectionHighlight(false); decorations.track(250); },
     collapse: () => { selectedIndex = 0; explicitSelection = false; renderResults(); },
     submitAI: () => { if (!isComposing && currentResults.some(item => item.type === 'AI')) executeSearch(input.value); },
     select: index => { explicitSelection = true; selectedIndex = index; executeSelected(); },
@@ -120,13 +121,13 @@
     clearTimeout(active.timer);
     active.animation.cancel();
   }
-  function playResultAnimation(node, frames, duration) {
+  function playResultAnimation(node, frames, duration, easing = 'cubic-bezier(0.2, 0.8, 0.2, 1)') {
     stopResultAnimation(node);
     if (!isVisible || !stylesReady || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !node.animate) return;
     try {
       const animation = node.animate(frames, {
         timeline: hostDocument.timeline, duration,
-        easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'both'
+        easing, fill: 'both'
       });
       const active = { animation, timer: null };
       const settle = () => {
@@ -161,11 +162,27 @@
     const to = { top: `${selected.offsetTop + resultsList.offsetTop}px`,
       left: `${selected.offsetLeft + resultsList.offsetLeft}px`,
       width: `${selected.offsetWidth}px`, height: `${selected.offsetHeight}px` };
+    // Async icon paints and repeated selection renders must not restart a glide.
+    if (highlightReady && animate && Object.keys(to).every(key => selectionHighlight.style[key] === to[key])) return;
     stopResultAnimation(selectionHighlight);
     Object.assign(selectionHighlight.style, to);
     selectionHighlight.hidden = false;
     if (highlightReady && animate && Object.keys(to).some(key => from[key] !== to[key])) {
-      playResultAnimation(selectionHighlight, [from, to], 150);
+      // Stretch the decoration toward its destination without moving row content.
+      const dy = parseFloat(to.top) - parseFloat(from.top);
+      const dx = parseFloat(to.left) - parseFloat(from.left);
+      const middle = {};
+      for (const key of ['top', 'left', 'width', 'height']) {
+        middle[key] = `${parseFloat(from[key]) + (parseFloat(to[key]) - parseFloat(from[key])) * .72}px`;
+      }
+      const stretch = Math.min(14, Math.abs(dy) * .14);
+      middle.top = `${parseFloat(middle.top) - stretch / 2}px`;
+      middle.height = `${parseFloat(middle.height) + stretch}px`;
+      const breadth = Math.min(8, Math.abs(dx) * .1);
+      middle.left = `${parseFloat(middle.left) - breadth / 2}px`;
+      middle.width = `${parseFloat(middle.width) + breadth}px`;
+      playResultAnimation(selectionHighlight, [{ ...from, offset: 0 }, { ...middle, offset: .42 },
+        { ...to, offset: 1 }], 240, 'cubic-bezier(.16,1,.3,1)');
     }
     highlightReady = true;
   }
@@ -173,13 +190,15 @@
     stopResultAnimation(resultsPanel);
     resultsPanel.style.height = '';
     const nextHeight = resultsPanel.offsetHeight;
+    lastPanelHeight = nextHeight;
     if (hasRenderedResults && previousHeight !== nextHeight) {
       playResultAnimation(resultsPanel, [{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }], 200);
     }
-    for (const row of inserted) playResultAnimation(row, [{ opacity: 0 }, { opacity: 1 }], 100);
+    for (const row of inserted) playResultAnimation(row, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }], 160);
     updateSelectionHighlight();
     hasRenderedResults = true;
   }
+  resultsList.addEventListener('toggle', () => { if (isVisible && hasRenderedResults) { finishResultRender(lastPanelHeight, []); decorations.track(250); } }, true);
   resultsContainer.addEventListener('scroll', () => { updateSelectionHighlight(false); resolveVisibleIcons(); }, { passive: true });
   frame.contentWindow.addEventListener('resize', () => {
     if (!isVisible) return;
@@ -495,6 +514,7 @@
   }
   function animateOverlay(opening) {
     decorations.setActive(true);
+    if (!opening) decorations.stopReflections?.();
     caretAura.setActive(opening);
     decorations.track(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 450);
     const interrupted = motionAnimations.length > 0;
@@ -517,16 +537,16 @@
           keyframes = [{ opacity: start.opacity }, { opacity: opening ? 1 : 0 }];
         } else if (opening) {
           // One damped overshoot, sampled at 60 points; normalize the endpoint.
-          const response = (t) => 1 - Math.exp(-5 * t) * (Math.cos(9 * t) + 5 / 9 * Math.sin(9 * t));
+          const response = (t) => 1 - Math.exp(-6 * t) * (Math.cos(11 * t) + 6 / 11 * Math.sin(11 * t));
           const end = response(1);
           const matrix = new frame.contentWindow.DOMMatrixReadOnly(start.transform === 'none' ? undefined : start.transform);
           keyframes = Array.from({ length: 61 }, (_, i) => {
             const t = i / 60;
             const progress = response(t) / end;
-            // Limit overshoot to 0.003 at the default starting scale.
-            const scale = Math.min(1.003, matrix.a + (1 - matrix.a) * progress);
+            // Bound the elastic arrival to a one-percent overshoot.
+            const scale = Math.min(1.01, matrix.a + (1 - matrix.a) * progress);
             return { offset: t, transform: `translateY(${matrix.m42 * (1 - progress)}px) scale(${scale})`,
-              opacity: Number(start.opacity) + (1 - Number(start.opacity)) * fadeProgress(t * 320 / 180) };
+              opacity: Number(start.opacity) + (1 - Number(start.opacity)) * fadeProgress(t * 360 / 180) };
           });
           keyframes[keyframes.length - 1] = { offset: 1, transform: 'translateY(0) scale(1)', opacity: 1 };
         } else {
@@ -536,8 +556,8 @@
           // The about:blank iframe can be throttled independently during host
           // hover/video activity. Use the same clock as the shortcut handler.
           timeline: hostDocument.timeline,
-          duration: opening ? (index === 0 ? 180 : 320) : 180,
-          delay: opening && index === 2 && !interrupted ? 16 : 0,
+          duration: opening ? (index === 0 ? 180 : 360) : 160,
+          delay: opening && index === 2 && !interrupted ? 28 : 0,
           easing: opening ? (index === 0 ? 'ease-in-out' : 'linear') : 'cubic-bezier(0.4, 0, 0.8, 1)', fill: 'both'
         }));
       });
@@ -622,10 +642,20 @@
     animateOverlay(false);
   }
 
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function reduceActiveMotion() {
+    if (!motionPreference.matches) return;
+    cancelResultMotion();
+    if (motionAnimations.length) {
+      if (isVisible) finishOpeningMotion(motionGeneration); else finishExit();
+    }
+    decorations.sync();
+  }
+  motionPreference.addEventListener?.('change', reduceActiveMotion);
   window.addEventListener('pagehide', (event) => {
     decorations.setActive(false);
     caretAura.setActive(false);
-    if (!event.persisted) { caretAura.dispose(); decorations.dispose(); view.dispose(); }
+    if (!event.persisted) { motionPreference.removeEventListener?.('change', reduceActiveMotion); caretAura.dispose(); decorations.dispose(); view.dispose(); }
     cancelResultMotion(true);
     clearTimeout(openingMotionTimer);
     openingMotionTimer = null;
